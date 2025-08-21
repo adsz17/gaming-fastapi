@@ -1,6 +1,4 @@
 import os
-import uuid
-from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -8,45 +6,36 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
     generate_latest,
 )
-from sqlalchemy import create_engine, select
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .db import engine
 from .middleware.ratelimit import RateLimitMiddleware
 from .models import Base, Round, User
 from .services.wallet import apply_transaction
+from .settings import settings
+from .routes.auth import router as auth_router
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
 JWT_ALG = "HS256"
-JWT_EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", "60"))
-
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
-_engine_args: dict[str, Any] = {"future": True}
-if DATABASE_URL.startswith("sqlite") and ":memory:" in DATABASE_URL:
-    _engine_args.update(
-        connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-if os.getenv("SERVERLESS_DB") == "true":
-    _engine_args.update(pool_size=3, max_overflow=3, pool_recycle=900)
-engine = create_engine(DATABASE_URL, **_engine_args)
-
-try:  # best effort; tests may override engine
-    Base.metadata.create_all(engine)
-except Exception:  # pragma: no cover - ignore DB issues during import
-    pass
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"])
+
+ALLOWED_ORIGINS = settings.ALLOWED_ORIGINS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(RateLimitMiddleware)
 
 registry = CollectorRegistry()
@@ -58,13 +47,12 @@ WALLET_URL = os.getenv("WALLET_URL", "http://localhost:8000")
 RNG_URL = os.getenv("RNG_URL", "http://localhost:8001")
 
 
-class AuthBody(BaseModel):
-    email: EmailStr
-    password: str
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
-class TokenResp(BaseModel):
-    token: str
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 
 class TxnReq(BaseModel):
@@ -77,11 +65,6 @@ class RoundReq(BaseModel):
     bet: Decimal
     client_seed: str
     idem: str
-
-
-def _create_token(uid: str) -> str:
-    exp = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRES_MIN)
-    return jwt.encode({"sub": uid, "exp": exp}, JWT_SECRET, algorithm=JWT_ALG)
 
 
 def get_current_user(request: Request) -> User:
@@ -99,31 +82,6 @@ def get_current_user(request: Request) -> User:
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return user
-
-
-@app.post("/auth/register", response_model=TokenResp)
-def register(body: AuthBody) -> TokenResp:
-    with Session(engine) as s, s.begin():
-        if s.scalar(select(User).where(User.email == body.email)):
-            raise HTTPException(status_code=400, detail="Email exists")
-        user = User(
-            id=str(uuid.uuid4()),
-            email=body.email,
-            password_hash=pwd_context.hash(body.password),
-        )
-        s.add(user)
-        user_id = user.id
-    return TokenResp(token=_create_token(user_id))
-
-
-@app.post("/auth/login", response_model=TokenResp)
-def login(body: AuthBody) -> TokenResp:
-    with Session(engine) as s:
-        user = s.scalar(select(User).where(User.email == body.email))
-        if not user or not pwd_context.verify(body.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        user_id = user.id
-    return TokenResp(token=_create_token(user_id))
 
 
 @app.get("/me")
@@ -145,7 +103,6 @@ def crash_round(body: RoundReq, user: User = Depends(get_current_user)) -> dict[
         existing = s.scalar(select(Round).where(Round.idempotency_key == body.idem))
         if existing:
             return {"round_id": existing.id, "payout": float(existing.payout)}
-    # debit via wallet service
     httpx.post(
         f"{WALLET_URL}/wallet/txn",
         json={
@@ -154,7 +111,6 @@ def crash_round(body: RoundReq, user: User = Depends(get_current_user)) -> dict[
             "idempotency_key": body.idem,
         },
     ).raise_for_status()
-    # rng service
     rng = httpx.post(
         f"{RNG_URL}/rng/crash",
         json={"client_seed": body.client_seed, "idempotency_key": body.idem},
@@ -183,4 +139,3 @@ def crash_round(body: RoundReq, user: User = Depends(get_current_user)) -> dict[
 @app.get("/metrics")
 def metrics() -> Response:
     return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
-
