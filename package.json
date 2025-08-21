@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Auxiliary package for Render build; no dependencies.",
   "scripts": {
-    "build": "mkdir -p dist && cp -r frontend/* dist/"
+    "build": "node tools/build.js"
   },
   "license": "ISC"
 }
