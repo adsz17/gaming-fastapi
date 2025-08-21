@@ -2,8 +2,9 @@ import os, hmac, hashlib, json, uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from .middleware.ratelimit import RateLimitMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
@@ -11,6 +12,7 @@ from sqlalchemy import (
     create_engine, Numeric, String, Text, JSON, BigInteger,
     func, select, ForeignKey, text
 )
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, Session, relationship
 
 from passlib.context import CryptContext
@@ -22,13 +24,20 @@ JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=5,
-    pool_recycle=1800,
-)
+if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=5,
+        pool_recycle=1800,
+    )
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -44,6 +53,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
 
 # ---------- DB Models ----------
 class Base(DeclarativeBase): pass
@@ -128,24 +138,25 @@ def create_token(user_id: str, email: str) -> str:
                "exp": int((now + timedelta(minutes=JWT_MINUTES)).timestamp())}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
-def get_current_user(session: Session = Depends(lambda: Session(engine))):
-    from fastapi import Request
-    # Simple Bearer extractor
-    def _dep(request: "Request"):
-        auth = request.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            raise HTTPException(401, "Missing Bearer token")
-        token = auth.split(" ", 1)[1]
-        try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-        except JWTError:
-            raise HTTPException(401, "Invalid or expired token")
-        uid = payload.get("sub")
-        user = session.get(User, uid)
-        if not user:
-            raise HTTPException(401, "User not found")
-        return user
-    return _dep
+def get_session():
+    with Session(engine) as s:
+        yield s
+
+
+def get_current_user(request: Request, session: Session = Depends(get_session)):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Missing Bearer token")
+    token = auth.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except JWTError:
+        raise HTTPException(401, "Invalid or expired token")
+    uid = payload.get("sub")
+    user = session.get(User, uid)
+    if not user:
+        raise HTTPException(401, "User not found")
+    return user
 
 @app.post("/auth/register", response_model=TokenOut)
 def register(body: RegisterIn):
@@ -170,7 +181,7 @@ def login(body: LoginIn):
         return {"token": create_token(u.id, u.email)}
 
 @app.get("/me")
-def me(user: User = Depends(get_current_user())):
+def me(user: User = Depends(get_current_user)):
     return {"id": user.id, "email": user.email, "created_at": user.created_at}
 
 # ---------- Game endpoints ----------
@@ -197,13 +208,13 @@ def health():
     return {"status": "ok"}
 
 @app.get("/account")
-def account(user: User = Depends(get_current_user())):
+def account(user: User = Depends(get_current_user)):
     with Session(engine) as s:
         acc = s.get(Account, user.id)
         return {"balance": float(acc.balance)}
 
-@app.post("/round", response_model=RoundOut)
-def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
+@app.post("/crash/round", response_model=RoundOut)
+def play_round(body: BetRoundIn, user: User = Depends(get_current_user)):
     if body.bet <= 0:
         raise HTTPException(400, "Bet must be > 0")
 
@@ -256,7 +267,7 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
         )
 
 @app.get("/history", response_model=HistoryResp)
-def history(limit: int = 20, user: User = Depends(get_current_user())):
+def history(limit: int = 20, user: User = Depends(get_current_user)):
     with Session(engine) as s:
         q = (
             select(Round)
