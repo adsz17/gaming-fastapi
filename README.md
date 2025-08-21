@@ -16,7 +16,8 @@ uvicorn api.main:app --reload --port 8000
 Abrí `http://127.0.0.1:8000/docs` para probar.
 
 2) **Frontend**
-Abrí `frontend/index.html` en tu navegador. (Si tu navegador bloquea CORS, servilo con un servercito local, por ejemplo:
+Primero abrí `frontend/login.html` para loguearte o registrarte. Luego serás redirigido a `index.html` (el juego).
+Si tu navegador bloquea CORS, servilo con un servercito local, por ejemplo:
 ```bash
 # en la carpeta frontend
 python -m http.server 8080

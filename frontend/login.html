@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login - Crash MVP</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: system-ui, sans-serif; margin:0; background:#0f1220; color:#eaeaf2; }
+    .wrap { padding:16px; max-width:480px; margin:0 auto; }
+    .card { background:#10142a; border-radius:14px; padding:16px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    input, button {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #2a2f55;
+      background: #1b2045; color: #fff; outline: none;
+    }
+    button { cursor: pointer; }
+    .log { margin-top:12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background:#0b0e1d; padding:12px; border-radius:8px; height:120px; overflow:auto; }
+  </style>
+  <script src="auth.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Login</h1>
+    <div class="card">
+      <div class="row">
+        <input id="email" type="email" placeholder="email@example.com" />
+        <input id="password" type="password" placeholder="password" />
+        <button id="btnLogin">Login</button>
+      </div>
+      <p>¿No tenés cuenta? <a href="register.html">Registrate</a></p>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+<script>
+if(isAuthed()) location.href = "index.html";
+
+const emailEl = document.getElementById("email");
+const passEl = document.getElementById("password");
+const btnLogin = document.getElementById("btnLogin");
+const logEl = document.getElementById("log");
+
+function log(s){ const t = new Date().toLocaleTimeString(); logEl.innerHTML = `[${t}] ${s}<br/>` + logEl.innerHTML; }
+
+btnLogin.onclick = async () => {
+  const email = emailEl.value.trim(), password = passEl.value;
+  if(!email || !password) return alert("Completá email y password");
+  const r = await fetch(API_BASE + "/auth/login", {
+    method: "POST", headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  const j = await r.json();
+  if(r.ok){ setToken(j.token); location.href = "index.html"; }
+  else log("Error: " + JSON.stringify(j));
+};
+</script>
+</body>
+</html>
