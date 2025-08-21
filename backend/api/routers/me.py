@@ -10,4 +10,4 @@ router = APIRouter()
 
 @router.get("/me")
 def me(user: User = Depends(get_current_user)) -> dict[str, Any]:
-    return {"id": user.id, "email": user.email}
+    return {"id": user.id, "email": user.email, "username": user.username}
