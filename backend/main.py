@@ -1,11 +1,61 @@
-import os, hmac, hashlib, json, uuid
+import os, hmac, hashlib, json, uuid, logging, time, contextvars
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
+
+from prometheus_client import (
+    Counter,
+    Histogram,
+    Gauge,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+)
+
+
+trace_id_ctx = contextvars.ContextVar("trace_id", default="-")
+
+
+class TraceIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.trace_id = trace_id_ctx.get()
+        return True
+
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log_record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "trace_id": record.trace_id,
+        }
+        if hasattr(record, "path"):
+            log_record["path"] = record.path
+        if hasattr(record, "method"):
+            log_record["method"] = record.method
+        if hasattr(record, "status_code"):
+            log_record["status_code"] = record.status_code
+        if hasattr(record, "latency"):
+            log_record["latency"] = record.latency
+        if record.exc_info:
+            log_record["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(log_record)
+
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+handler.addFilter(TraceIdFilter())
+
+root = logging.getLogger()
+root.handlers = [handler]
+root.setLevel(logging.INFO)
+for name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+    logging.getLogger(name).handlers = []
+    logging.getLogger(name).propagate = True
 
 from sqlalchemy import (
     create_engine, Numeric, String, Text, JSON, BigInteger,
@@ -44,6 +94,64 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------- Observability ----------
+REQUEST_LATENCY = Histogram(
+    "http_request_latency_seconds", "Request latency", ["endpoint", "method"]
+)
+ERROR_COUNT = Counter(
+    "http_request_errors_total", "Request error count", ["endpoint", "method"]
+)
+RTP_GAUGE = Gauge("rtp_observed", "Observed RTP")
+_total_bets = 0.0
+_total_payouts = 0.0
+
+
+def _update_rtp(bet: Decimal, payout: Decimal) -> None:
+    global _total_bets, _total_payouts
+    _total_bets += float(bet)
+    _total_payouts += float(payout)
+    if _total_bets > 0:
+        RTP_GAUGE.set(_total_payouts / _total_bets)
+
+
+@app.middleware("http")
+async def observability_middleware(request: Request, call_next):
+    trace_id = uuid.uuid4().hex
+    token = trace_id_ctx.set(trace_id)
+    start = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+    except Exception:
+        logging.getLogger("uvicorn.error").exception("request failed")
+        raise
+    finally:
+        duration = time.perf_counter() - start
+        status_code = response.status_code if response else 500
+        REQUEST_LATENCY.labels(endpoint=request.url.path, method=request.method).observe(
+            duration
+        )
+        if status_code >= 400:
+            ERROR_COUNT.labels(endpoint=request.url.path, method=request.method).inc()
+        logging.getLogger("uvicorn.access").info(
+            "request",
+            extra={
+                "path": request.url.path,
+                "method": request.method,
+                "status_code": status_code,
+                "latency": duration,
+            },
+        )
+        trace_id_ctx.reset(token)
+        if response:
+            response.headers["X-Trace-Id"] = trace_id
+    return response
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # ---------- DB Models ----------
 class Base(DeclarativeBase): pass
@@ -243,6 +351,7 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
         s.add(row)
         s.commit()
         s.refresh(row)
+        _update_rtp(row.bet, row.payout)
         return RoundOut(
             round_id=row.id,
             bet=float(row.bet),
