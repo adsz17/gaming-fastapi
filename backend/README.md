@@ -16,3 +16,14 @@ uvicorn main:app --reload --port 8000
 ```
 
 Then open `http://127.0.0.1:8000/docs` for Swagger UI.
+
+## Database migrations
+
+Database schema changes are managed with Alembic. Set the `DATABASE_URL`
+environment variable and run:
+
+```bash
+alembic upgrade head
+```
+
+This will create or upgrade the tables in the configured database.
