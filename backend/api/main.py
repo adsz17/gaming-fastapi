@@ -21,12 +21,15 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-raw = os.getenv("CORS_ORIGINS", "[]")
-try:
-    ORIGINS = json.loads(raw)
-except Exception:
-    ORIGINS = [o.strip() for o in raw.split(",") if o.strip()]
-ORIGINS = [o.rstrip("/") for o in ORIGINS]
+raw = os.getenv("CORS_ORIGINS")
+if raw:
+    try:
+        ORIGINS = json.loads(raw)
+    except Exception:
+        ORIGINS = [o.strip() for o in raw.split(",") if o.strip()]
+    ORIGINS = [o.rstrip("/") for o in ORIGINS]
+else:
+    ORIGINS = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
