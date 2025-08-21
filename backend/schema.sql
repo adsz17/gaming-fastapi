@@ -27,3 +27,14 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger_entries(user_id);
+CREATE TABLE IF NOT EXISTS ledger (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  amount NUMERIC(18,6) NOT NULL,
+  balance NUMERIC(18,6) NOT NULL,
+  meta JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger(user_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_created ON ledger(created_at);
