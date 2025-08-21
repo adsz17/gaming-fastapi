@@ -3,7 +3,27 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
+
+import os, hmac, hashlib, json, uuid
+from pathlib import Path
+
+import hashlib
+import hmac
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from fastapi import FastAPI, HTTPException, Depends, Header
+
+from typing import Any, List
+
+from pathlib import Path
+
+
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
@@ -57,21 +77,31 @@ for name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
     logging.getLogger(name).handlers = []
     logging.getLogger(name).propagate = True
 
-from sqlalchemy import (
-    create_engine, Numeric, String, Text, JSON, BigInteger,
-    func, select, ForeignKey, text
-)
-from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, Session, relationship
-
+from jose import JWTError, jwt
 from passlib.context import CryptContext
-from jose import jwt, JWTError
+
+from fastapi.responses import FileResponse
+
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    create_engine,
+    select,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
 # ---------- Config ----------
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
 JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-token")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -152,9 +182,14 @@ async def observability_middleware(request: Request, call_next):
 @app.get("/metrics")
 def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+# ---------- Admin Auth ----------
+def require_admin(x_admin_token: str = Header(..., alias="X-Admin-Token")):
+    if x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(401, "Invalid admin token")
 
 # ---------- DB Models ----------
-class Base(DeclarativeBase): pass
+class Base(DeclarativeBase):
+    pass
 
 class User(Base):
     __tablename__ = "users"
@@ -186,19 +221,32 @@ class Round(Base):
     result_json: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
+class Ledger(Base):
+    __tablename__ = "ledger"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    balance: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    meta: Mapped[dict] = mapped_column(JSON, default={})
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
 # ---------- Startup: create tables ----------
 @app.on_event("startup")
 def _startup():
     Base.metadata.create_all(engine)
 
 # ---------- Provably Fair RNG (server-side) ----------
-SEEDS = {
+SEEDS: dict[str, Any] = {
     "server_seed": os.urandom(32).hex(),
-    "server_seed_hash": None,
-    "nonce": 0
+    "server_seed_hash": "",
+    "nonce": 0,
 }
+
+
 def _hash_seed(seed_hex: str) -> str:
     return hashlib.sha256(bytes.fromhex(seed_hex)).hexdigest()
+
+
 SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
 
 def hmac_sha256(server_seed_hex: str, message: str) -> str:
@@ -308,6 +356,8 @@ def health():
 def account(user: User = Depends(get_current_user())):
     with Session(engine) as s:
         acc = s.get(Account, user.id)
+        if acc is None:
+            raise HTTPException(404, "Account not found")
         return {"balance": float(acc.balance)}
 
 @app.post("/round", response_model=RoundOut)
@@ -321,24 +371,15 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
             acc = Account(user_id=user.id, balance=Decimal("0"))
             s.add(acc)
             s.flush()
-
         bet_dec = Decimal(str(round(body.bet, 6)))
         if acc.balance < bet_dec:
             raise HTTPException(400, "Insufficient balance")
 
-        # 1) Debitar
-        acc.balance -= bet_dec
-
-        # 2) Generar resultado
         SEEDS["nonce"] += 1
         nonce = SEEDS["nonce"]
         mult = crash_multiplier(SEEDS["server_seed"], body.client_seed, nonce)
         payout = Decimal(str(round(body.bet * mult, 2)))
 
-        # 3) Acreditar
-        acc.balance += payout
-
-        # 4) Persistir ronda
         row = Round(
             user_id=user.id,
             bet=bet_dec,
@@ -349,6 +390,14 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
             result_json={"multiplier": mult},
         )
         s.add(row)
+        s.flush()
+
+        acc.balance -= bet_dec
+        s.add(Ledger(user_id=user.id, amount=-bet_dec, balance=acc.balance, meta={"type": "bet", "round_id": row.id}))
+
+        acc.balance += payout
+        s.add(Ledger(user_id=user.id, amount=payout, balance=acc.balance, meta={"type": "payout", "round_id": row.id}))
+
         s.commit()
         s.refresh(row)
         _update_rtp(row.bet, row.payout)
@@ -363,6 +412,10 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
             nonce=row.nonce,
             created_at=row.created_at.isoformat()
         )
+
+@app.post("/crash/round", response_model=RoundOut)
+def play_round_alias(body: BetRoundIn, user: User = Depends(get_current_user())):
+    return play_round(body, user)
 
 @app.get("/history", response_model=HistoryResp)
 def history(limit: int = 20, user: User = Depends(get_current_user())):
@@ -396,3 +449,58 @@ def rotate_seed():
     SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
     SEEDS["nonce"] = 0
     return {"ok": True, "old_server_seed_hash": old_hash, "new_server_seed_hash": SEEDS["server_seed_hash"]}
+
+
+BASE_DIR = Path(__file__).resolve().parent
+app.mount("/", StaticFiles(directory=BASE_DIR / "public", html=True), name="public")
+
+# ---------- Admin Endpoints ----------
+@app.get("/admin/rounds")
+def admin_rounds(limit: int = 100, _: str = Depends(require_admin)):
+    with Session(engine) as s:
+        q = select(Round).order_by(Round.id.desc()).limit(limit)
+        items = s.scalars(q).all()
+        out = []
+        for r in items:
+            out.append({
+                "id": r.id,
+                "user_id": r.user_id,
+                "bet": float(r.bet),
+                "payout": float(r.payout),
+                "created_at": r.created_at.isoformat(),
+            })
+        return {"rounds": out}
+
+@app.get("/admin/ledger")
+def admin_ledger(user_id: Optional[str] = None, limit: int = 100, _: str = Depends(require_admin)):
+    with Session(engine) as s:
+        q = select(Ledger)
+        if user_id:
+            q = q.where(Ledger.user_id == user_id)
+        q = q.order_by(Ledger.id.desc()).limit(limit)
+        items = s.scalars(q).all()
+        out = []
+        for l in items:
+            out.append({
+                "id": l.id,
+                "user_id": l.user_id,
+                "amount": float(l.amount),
+                "balance": float(l.balance),
+                "meta": l.meta,
+                "created_at": l.created_at.isoformat(),
+            })
+        return {"ledger": out}
+
+@app.post("/admin/rng/rotate")
+def admin_rotate_rng(_: str = Depends(require_admin)):
+    return rotate_seed()
+
+# ---------- Static Files ----------
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/", StaticFiles(directory="public", html=True), name="public")
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).parent / "public" / "index.html")
