@@ -24,6 +24,7 @@
     .meta { font-size:12px; opacity:.8; margin-top:8px; word-break: break-all; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.2.5/pixi.min.js"></script>
+  <script src="auth.js"></script>
 </head>
 <body>
   <header>
@@ -40,12 +41,6 @@
         <b>Auth</b>
         <span class="pill" id="status">Desconectado</span>
         <span class="pill" id="balance">Balance: -</span>
-      </div>
-      <div class="row" style="margin-top:10px;">
-        <input id="email" type="email" placeholder="email@example.com" />
-        <input id="password" type="password" placeholder="password" />
-        <button id="btnRegister">Registrar</button>
-        <button id="btnLogin">Login</button>
         <button id="btnLogout">Logout</button>
       </div>
     </div>
@@ -67,14 +62,8 @@
   </div>
 
 <script>
-const API_BASE = "http://127.0.0.1:8000";
-
 const statusEl = document.getElementById("status");
 const balEl = document.getElementById("balance");
-const emailEl = document.getElementById("email");
-const passEl = document.getElementById("password");
-const btnReg = document.getElementById("btnRegister");
-const btnLogin = document.getElementById("btnLogin");
 const btnLogout = document.getElementById("btnLogout");
 
 const logEl = document.getElementById("log");
@@ -85,10 +74,7 @@ const healthEl = document.getElementById("health");
 const metaEl = document.getElementById("meta");
 const playBtn = document.getElementById("playBtn");
 
-function setToken(t){ localStorage.setItem("token", t); }
-function getToken(){ return localStorage.getItem("token"); }
-function clearToken(){ localStorage.removeItem("token"); }
-function isAuthed(){ return !!getToken(); }
+if(!isAuthed()) location.href = "login.html";
 
 function log(s){
   const t = new Date().toLocaleTimeString();
@@ -106,11 +92,6 @@ async function health(){
 setInterval(health, 3000); health();
 
 async function refreshMe(){
-  if(!isAuthed()){
-    statusEl.textContent = "Desconectado";
-    balEl.textContent = "Balance: -";
-    return;
-  }
   statusEl.textContent = "Conectado";
   try{
     const r = await fetch(API_BASE + "/account", {
@@ -122,6 +103,7 @@ async function refreshMe(){
     }else{
       statusEl.textContent = "Token inválido";
       clearToken();
+      location.href = "login.html";
     }
   }catch(e){
     statusEl.textContent = "Error";
@@ -129,31 +111,7 @@ async function refreshMe(){
 }
 refreshMe();
 
-btnReg.onclick = async () => {
-  const email = emailEl.value.trim(), password = passEl.value;
-  if(!email || !password) return alert("Completá email y password");
-  const r = await fetch(API_BASE + "/auth/register", {
-    method: "POST", headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({ email, password })
-  });
-  const j = await r.json();
-  if(r.ok){ setToken(j.token); refreshMe(); log("Registro OK (+100 de bienvenida)"); }
-  else log("Error: " + JSON.stringify(j));
-};
-
-btnLogin.onclick = async () => {
-  const email = emailEl.value.trim(), password = passEl.value;
-  if(!email || !password) return alert("Completá email y password");
-  const r = await fetch(API_BASE + "/auth/login", {
-    method: "POST", headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({ email, password })
-  });
-  const j = await r.json();
-  if(r.ok){ setToken(j.token); refreshMe(); log("Login OK"); }
-  else log("Error: " + JSON.stringify(j));
-};
-
-btnLogout.onclick = () => { clearToken(); refreshMe(); log("Logout"); };
+btnLogout.onclick = () => { clearToken(); location.href = "login.html"; };
 
 // ---- PIXI ----
 const app = new PIXI.Application();
