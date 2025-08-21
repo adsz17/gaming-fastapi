@@ -1,27 +1,125 @@
+import os, hmac, hashlib, json, uuid, httpx
+
+import os, hmac, hashlib, json, uuid, logging, time, contextvars
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from fastapi import FastAPI, HTTPException, Depends, Request, Response
+
 import os, hmac, hashlib, json, uuid
+from pathlib import Path
+
+import hashlib
+import hmac
+import os
+import uuid
+ main
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from .middleware.ratelimit import RateLimitMiddleware
+
+from fastapi import FastAPI, HTTPException, Depends, Header
+
+from typing import Any, List
+
+from pathlib import Path
+
+
+from fastapi import Depends, FastAPI, HTTPException
+ main
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
 from sqlalchemy import (
-    create_engine, Numeric, String, Text, JSON, BigInteger,
-    func, select, ForeignKey, text
+    create_engine, Numeric, String, Text, JSON, BigInteger, Integer,
+    func, select, ForeignKey, text, UniqueConstraint
+
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from .models import Base, User, Account, Round, LedgerEntry
+from .services.wallet import apply_transaction
+from prometheus_client import (
+    Counter,
+    Histogram,
+    Gauge,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
 )
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, Session, relationship
 
+
+
+trace_id_ctx = contextvars.ContextVar("trace_id", default="-")
+
+
+class TraceIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.trace_id = trace_id_ctx.get()
+        return True
+
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log_record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "trace_id": record.trace_id,
+        }
+        if hasattr(record, "path"):
+            log_record["path"] = record.path
+        if hasattr(record, "method"):
+            log_record["method"] = record.method
+        if hasattr(record, "status_code"):
+            log_record["status_code"] = record.status_code
+        if hasattr(record, "latency"):
+            log_record["latency"] = record.latency
+        if record.exc_info:
+            log_record["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(log_record)
+
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+handler.addFilter(TraceIdFilter())
+
+root = logging.getLogger()
+root.handlers = [handler]
+root.setLevel(logging.INFO)
+for name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+    logging.getLogger(name).handlers = []
+    logging.getLogger(name).propagate = True
+
+from jose import JWTError, jwt
 from passlib.context import CryptContext
-from jose import jwt, JWTError
+
+from fastapi.responses import FileResponse
+
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    create_engine,
+    select,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
 # ---------- Config ----------
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
 JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-token")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
@@ -39,6 +137,18 @@ else:
         pool_recycle=1800,
     )
 
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=5,
+    pool_recycle=1800,
+)
+
+WALLET_URL = os.getenv("WALLET_URL", "http://wallet:8000")
+RNG_URL = os.getenv("RNG_URL", "http://rng:8000")
+
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI(title="iGaming Starter - Postgres/JWT", version="0.2.0")
@@ -55,8 +165,71 @@ app.add_middleware(
 )
 app.add_middleware(RateLimitMiddleware)
 
+# ---------- Observability ----------
+REQUEST_LATENCY = Histogram(
+    "http_request_latency_seconds", "Request latency", ["endpoint", "method"]
+)
+ERROR_COUNT = Counter(
+    "http_request_errors_total", "Request error count", ["endpoint", "method"]
+)
+RTP_GAUGE = Gauge("rtp_observed", "Observed RTP")
+_total_bets = 0.0
+_total_payouts = 0.0
+
+
+def _update_rtp(bet: Decimal, payout: Decimal) -> None:
+    global _total_bets, _total_payouts
+    _total_bets += float(bet)
+    _total_payouts += float(payout)
+    if _total_bets > 0:
+        RTP_GAUGE.set(_total_payouts / _total_bets)
+
+
+@app.middleware("http")
+async def observability_middleware(request: Request, call_next):
+    trace_id = uuid.uuid4().hex
+    token = trace_id_ctx.set(trace_id)
+    start = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+    except Exception:
+        logging.getLogger("uvicorn.error").exception("request failed")
+        raise
+    finally:
+        duration = time.perf_counter() - start
+        status_code = response.status_code if response else 500
+        REQUEST_LATENCY.labels(endpoint=request.url.path, method=request.method).observe(
+            duration
+        )
+        if status_code >= 400:
+            ERROR_COUNT.labels(endpoint=request.url.path, method=request.method).inc()
+        logging.getLogger("uvicorn.access").info(
+            "request",
+            extra={
+                "path": request.url.path,
+                "method": request.method,
+                "status_code": status_code,
+                "latency": duration,
+            },
+        )
+        trace_id_ctx.reset(token)
+        if response:
+            response.headers["X-Trace-Id"] = trace_id
+    return response
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+# ---------- Admin Auth ----------
+def require_admin(x_admin_token: str = Header(..., alias="X-Admin-Token")):
+    if x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(401, "Invalid admin token")
+
 # ---------- DB Models ----------
-class Base(DeclarativeBase): pass
+class Base(DeclarativeBase):
+    pass
 
 class User(Base):
     __tablename__ = "users"
@@ -77,7 +250,8 @@ class Account(Base):
 
 class Round(Base):
     __tablename__ = "rounds"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    __table_args__ = (UniqueConstraint("user_id", "idem"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(36), index=True)
     game_code: Mapped[str] = mapped_column(String(50), default="crash_v1")
     bet: Mapped[Decimal] = mapped_column(Numeric(18, 6))
@@ -86,21 +260,38 @@ class Round(Base):
     client_seed: Mapped[str] = mapped_column(Text)
     nonce: Mapped[int] = mapped_column(BigInteger)
     result_json: Mapped[dict] = mapped_column(JSON)
+    idem: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+# ---------- Database ----------
+# The schema is managed via Alembic migrations. Tables are not
+# created automatically at runtime. Ensure `alembic upgrade head`
+# has been executed before starting the application.
+class Ledger(Base):
+    __tablename__ = "ledger"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    balance: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    meta: Mapped[dict] = mapped_column(JSON, default={})
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 # ---------- Startup: create tables ----------
 @app.on_event("startup")
 def _startup():
-    Base.metadata.create_all(engine)
 
 # ---------- Provably Fair RNG (server-side) ----------
-SEEDS = {
+SEEDS: dict[str, Any] = {
     "server_seed": os.urandom(32).hex(),
-    "server_seed_hash": None,
-    "nonce": 0
+    "server_seed_hash": "",
+    "nonce": 0,
 }
+
+
 def _hash_seed(seed_hex: str) -> str:
     return hashlib.sha256(bytes.fromhex(seed_hex)).hexdigest()
+
+
 SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
 
 def hmac_sha256(server_seed_hex: str, message: str) -> str:
@@ -144,6 +335,7 @@ def get_session():
 
 
 def get_current_user(request: Request, session: Session = Depends(get_session)):
+def get_current_user(request: Request, session: Session = Depends(lambda: Session(engine))):
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(401, "Missing Bearer token")
@@ -189,6 +381,11 @@ class BetRoundIn(BaseModel):
     bet: float
     client_seed: str
 
+class CrashRoundIn(BaseModel):
+    bet: float
+    client_seed: str
+    idem: str
+
 class RoundOut(BaseModel):
     round_id: int
     bet: float
@@ -203,6 +400,15 @@ class RoundOut(BaseModel):
 class HistoryResp(BaseModel):
     rounds: List[RoundOut]
 
+class WalletTxnIn(BaseModel):
+    amount: float
+    reason: str
+    idempotency_key: str
+
+class WalletTxnOut(BaseModel):
+    entry_id: int
+    balance: float
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -211,9 +417,116 @@ def health():
 def account(user: User = Depends(get_current_user)):
     with Session(engine) as s:
         acc = s.get(Account, user.id)
+        if acc is None:
+            raise HTTPException(404, "Account not found")
         return {"balance": float(acc.balance)}
 
 @app.post("/crash/round", response_model=RoundOut)
+
+def crash_round(body: CrashRoundIn, user: User = Depends(get_current_user())):
+    if body.bet <= 0:
+        raise HTTPException(400, "Bet must be > 0")
+
+    with Session(engine) as s:
+        existing = s.scalar(select(Round).where(Round.user_id == user.id, Round.idem == body.idem))
+        if existing:
+            return RoundOut(
+                round_id=existing.id,
+                bet=float(existing.bet),
+                payout=float(existing.payout),
+                multiplier=float(existing.result_json.get("multiplier", 0)),
+                new_balance=-1.0,
+                server_seed_hash=existing.server_seed_hash,
+                client_seed=existing.client_seed,
+                nonce=existing.nonce,
+                created_at=existing.created_at.isoformat()
+            )
+
+        bet_dec = Decimal(str(round(body.bet, 6)))
+
+        try:
+            r1 = httpx.post(
+                f"{WALLET_URL}/txn",
+                json={"amount": -float(bet_dec), "idempotency_key": f"{body.idem}:bet"},
+                headers={"X-User-Id": user.id},
+            )
+            r1.raise_for_status()
+        except Exception:
+            raise HTTPException(502, "wallet debit failed")
+
+        try:
+            r2 = httpx.post(f"{RNG_URL}/crash", json={"client_seed": body.client_seed})
+            r2.raise_for_status()
+            rng_data = r2.json()
+            mult = float(rng_data["multiplier"])
+            nonce = int(rng_data["nonce"])
+            server_seed_hash = rng_data["server_seed_hash"]
+        except Exception:
+            try:
+                httpx.post(
+                    f"{WALLET_URL}/txn",
+                    json={"amount": float(bet_dec), "idempotency_key": f"{body.idem}:refund"},
+                    headers={"X-User-Id": user.id},
+                )
+            except Exception:
+                pass
+            raise HTTPException(502, "rng failed")
+
+        payout = Decimal(str(round(float(bet_dec) * mult, 2)))
+
+        try:
+            r3 = httpx.post(
+                f"{WALLET_URL}/txn",
+                json={"amount": float(payout), "idempotency_key": f"{body.idem}:payout"},
+                headers={"X-User-Id": user.id},
+            )
+            r3.raise_for_status()
+            new_balance = float(r3.json().get("balance", 0))
+        except Exception:
+            try:
+                httpx.post(
+                    f"{WALLET_URL}/txn",
+                    json={"amount": float(bet_dec), "idempotency_key": f"{body.idem}:refund"},
+                    headers={"X-User-Id": user.id},
+                )
+            except Exception:
+                pass
+            raise HTTPException(502, "wallet payout failed")
+
+        row = Round(
+            user_id=user.id,
+            bet=bet_dec,
+            payout=payout,
+            server_seed_hash=server_seed_hash,
+            client_seed=body.client_seed,
+            nonce=nonce,
+            result_json={"multiplier": mult},
+            idem=body.idem,
+        )
+        s.add(row)
+        s.commit()
+        s.refresh(row)
+        return RoundOut(
+            round_id=row.id,
+            bet=float(row.bet),
+            payout=float(row.payout),
+            multiplier=mult,
+            new_balance=new_balance,
+            server_seed_hash=row.server_seed_hash,
+            client_seed=row.client_seed,
+            nonce=row.nonce,
+            created_at=row.created_at.isoformat()
+        )
+
+@app.post("/wallet/txn", response_model=WalletTxnOut)
+def wallet_txn(body: WalletTxnIn, user: User = Depends(get_current_user)):
+    amount_dec = Decimal(str(round(body.amount, 6)))
+    with Session(engine) as s:
+        with s.begin():
+            entry = apply_transaction(s, user.id, amount_dec, body.reason, body.idempotency_key)
+        return {"entry_id": entry.id, "balance": float(entry.balance_after)}
+
+@app.post("/round", response_model=RoundOut)
 def play_round(body: BetRoundIn, user: User = Depends(get_current_user)):
     if body.bet <= 0:
         raise HTTPException(400, "Bet must be > 0")
@@ -224,24 +537,15 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user)):
             acc = Account(user_id=user.id, balance=Decimal("0"))
             s.add(acc)
             s.flush()
-
         bet_dec = Decimal(str(round(body.bet, 6)))
         if acc.balance < bet_dec:
             raise HTTPException(400, "Insufficient balance")
 
-        # 1) Debitar
-        acc.balance -= bet_dec
-
-        # 2) Generar resultado
         SEEDS["nonce"] += 1
         nonce = SEEDS["nonce"]
         mult = crash_multiplier(SEEDS["server_seed"], body.client_seed, nonce)
         payout = Decimal(str(round(body.bet * mult, 2)))
 
-        # 3) Acreditar
-        acc.balance += payout
-
-        # 4) Persistir ronda
         row = Round(
             user_id=user.id,
             bet=bet_dec,
@@ -252,8 +556,17 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user)):
             result_json={"multiplier": mult},
         )
         s.add(row)
+        s.flush()
+
+        acc.balance -= bet_dec
+        s.add(Ledger(user_id=user.id, amount=-bet_dec, balance=acc.balance, meta={"type": "bet", "round_id": row.id}))
+
+        acc.balance += payout
+        s.add(Ledger(user_id=user.id, amount=payout, balance=acc.balance, meta={"type": "payout", "round_id": row.id}))
+
         s.commit()
         s.refresh(row)
+        _update_rtp(row.bet, row.payout)
         return RoundOut(
             round_id=row.id,
             bet=float(row.bet),
@@ -265,6 +578,10 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user)):
             nonce=row.nonce,
             created_at=row.created_at.isoformat()
         )
+
+@app.post("/crash/round", response_model=RoundOut)
+def play_round_alias(body: BetRoundIn, user: User = Depends(get_current_user())):
+    return play_round(body, user)
 
 @app.get("/history", response_model=HistoryResp)
 def history(limit: int = 20, user: User = Depends(get_current_user)):
@@ -298,3 +615,58 @@ def rotate_seed():
     SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
     SEEDS["nonce"] = 0
     return {"ok": True, "old_server_seed_hash": old_hash, "new_server_seed_hash": SEEDS["server_seed_hash"]}
+
+
+BASE_DIR = Path(__file__).resolve().parent
+app.mount("/", StaticFiles(directory=BASE_DIR / "public", html=True), name="public")
+
+# ---------- Admin Endpoints ----------
+@app.get("/admin/rounds")
+def admin_rounds(limit: int = 100, _: str = Depends(require_admin)):
+    with Session(engine) as s:
+        q = select(Round).order_by(Round.id.desc()).limit(limit)
+        items = s.scalars(q).all()
+        out = []
+        for r in items:
+            out.append({
+                "id": r.id,
+                "user_id": r.user_id,
+                "bet": float(r.bet),
+                "payout": float(r.payout),
+                "created_at": r.created_at.isoformat(),
+            })
+        return {"rounds": out}
+
+@app.get("/admin/ledger")
+def admin_ledger(user_id: Optional[str] = None, limit: int = 100, _: str = Depends(require_admin)):
+    with Session(engine) as s:
+        q = select(Ledger)
+        if user_id:
+            q = q.where(Ledger.user_id == user_id)
+        q = q.order_by(Ledger.id.desc()).limit(limit)
+        items = s.scalars(q).all()
+        out = []
+        for l in items:
+            out.append({
+                "id": l.id,
+                "user_id": l.user_id,
+                "amount": float(l.amount),
+                "balance": float(l.balance),
+                "meta": l.meta,
+                "created_at": l.created_at.isoformat(),
+            })
+        return {"ledger": out}
+
+@app.post("/admin/rng/rotate")
+def admin_rotate_rng(_: str = Depends(require_admin)):
+    return rotate_seed()
+
+# ---------- Static Files ----------
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/", StaticFiles(directory="public", html=True), name="public")
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).parent / "public" / "index.html")

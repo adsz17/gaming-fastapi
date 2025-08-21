@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Panel</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 4px 8px; }
+    th { background: #eee; }
+  </style>
+</head>
+<body>
+  <h1>Rounds</h1>
+  <table id="rounds">
+    <thead>
+      <tr><th>ID</th><th>User</th><th>Bet</th><th>Payout</th><th>Created</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <h1>Ledger</h1>
+  <table id="ledger">
+    <thead>
+      <tr><th>ID</th><th>User</th><th>Amount</th><th>Balance</th><th>Meta</th><th>Created</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+<script>
+async function load() {
+  const token = localStorage.getItem('adminToken') || prompt('Admin Token');
+  localStorage.setItem('adminToken', token);
+  const headers = { 'X-Admin-Token': token };
+  const rounds = await fetch('/admin/rounds', { headers }).then(r => r.json());
+  const ledger = await fetch('/admin/ledger', { headers }).then(r => r.json());
+  const rbody = document.querySelector('#rounds tbody');
+  rounds.rounds.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.id}</td><td>${r.user_id}</td><td>${r.bet}</td><td>${r.payout}</td><td>${r.created_at}</td>`;
+    rbody.appendChild(tr);
+  });
+  const lbody = document.querySelector('#ledger tbody');
+  ledger.ledger.forEach(l => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${l.id}</td><td>${l.user_id}</td><td>${l.amount}</td><td>${l.balance}</td><td>${JSON.stringify(l.meta)}</td><td>${l.created_at}</td>`;
+    lbody.appendChild(tr);
+  });
+}
+load();
+</script>
+</body>
+</html>
