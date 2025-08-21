@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "Auxiliary package for Render build; no dependencies.",
   "scripts": {
-    "build": "node tools/build.js"
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
   "license": "ISC"
 }
