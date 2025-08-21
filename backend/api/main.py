@@ -2,18 +2,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 import os
+from types import ModuleType
+from typing import Optional
 
 from .middleware.ratelimit import RateLimitMiddleware
 from .auth import router as auth_router
 
 # Routers (importá solo los que existan en tu proyecto)
+wallet: Optional[ModuleType] = None
+crash: Optional[ModuleType] = None
+me: Optional[ModuleType] = None
+metrics: Optional[ModuleType] = None
 try:
-    from .routers import wallet, crash, me, metrics
+    from .routers import wallet as wallet, crash as crash, me as me, metrics as metrics  # type: ignore
 except Exception:
-    wallet = None
-    crash = None
-    me = None
-    metrics = None
+    pass
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
@@ -38,9 +41,9 @@ app.add_middleware(RateLimitMiddleware)
 def health():
     return {"status": "ok"}
 
-# Redirect root to Swagger docs
-@app.get("/", include_in_schema=False)
-def root():
+# Redirect root to Swagger docs, handling both GET and HEAD
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+async def root() -> RedirectResponse:
     return RedirectResponse(url="/docs")
 
 # Incluí routers si existen
