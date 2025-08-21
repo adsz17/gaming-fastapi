@@ -1,29 +1,41 @@
-import os, hmac, hashlib, json, uuid
+import hashlib
+import hmac
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
+from typing import Any, List
+
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends
+
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
-
-from sqlalchemy import (
-    create_engine, Numeric, String, Text, JSON, BigInteger,
-    func, select, ForeignKey, text
-)
-from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, Session, relationship
-
+from jose import JWTError, jwt
 from passlib.context import CryptContext
-from jose import jwt, JWTError
+
+from fastapi.responses import FileResponse
+
+from pydantic import BaseModel, EmailStr
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    create_engine,
+    select,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
 # ---------- Config ----------
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
 JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -48,7 +60,8 @@ app.add_middleware(
 )
 
 # ---------- DB Models ----------
-class Base(DeclarativeBase): pass
+class Base(DeclarativeBase):
+    pass
 
 class User(Base):
     __tablename__ = "users"
@@ -86,13 +99,17 @@ def _startup():
     Base.metadata.create_all(engine)
 
 # ---------- Provably Fair RNG (server-side) ----------
-SEEDS = {
+SEEDS: dict[str, Any] = {
     "server_seed": os.urandom(32).hex(),
-    "server_seed_hash": None,
-    "nonce": 0
+    "server_seed_hash": "",
+    "nonce": 0,
 }
+
+
 def _hash_seed(seed_hex: str) -> str:
     return hashlib.sha256(bytes.fromhex(seed_hex)).hexdigest()
+
+
 SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
 
 def hmac_sha256(server_seed_hex: str, message: str) -> str:
@@ -202,6 +219,8 @@ def health():
 def account(user: User = Depends(get_current_user())):
     with Session(engine) as s:
         acc = s.get(Account, user.id)
+        if acc is None:
+            raise HTTPException(404, "Account not found")
         return {"balance": float(acc.balance)}
 
 @app.post("/round", response_model=RoundOut)
