@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
-from ..db import engine
+from .. import db
 from ..models import Round, User
 from .metrics import rtp_observed
 
@@ -27,7 +27,7 @@ class RoundReq(BaseModel):
 
 @router.post("/round")
 def crash_round(body: RoundReq, user: User = Depends(get_current_user)) -> dict[str, Any]:
-    with Session(engine) as s:
+    with Session(db.engine) as s:
         existing = s.scalar(select(Round).where(Round.idempotency_key == body.idem))
         if existing:
             return {"round_id": existing.id, "payout": float(existing.payout)}
@@ -46,7 +46,7 @@ def crash_round(body: RoundReq, user: User = Depends(get_current_user)) -> dict[
     rng.raise_for_status()
     data = rng.json()
     payout = body.bet * Decimal(str(data["multiplier"]))
-    with Session(engine) as s, s.begin():
+    with Session(db.engine) as s, s.begin():
         round_obj = Round(
             user_id=user.id,
             bet=body.bet,
