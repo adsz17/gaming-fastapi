@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import db
+from .db import engine
 from .models import User
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
@@ -45,7 +45,7 @@ def get_current_user(request: Request) -> User:
     except JWTError as exc:  # pragma: no cover - security check
         raise HTTPException(status_code=401, detail="Invalid token") from exc
     uid = payload.get("sub")
-    with Session(db.engine) as s:
+    with Session(engine) as s:
         user = s.get(User, uid)
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
@@ -54,7 +54,7 @@ def get_current_user(request: Request) -> User:
 
 @router.post("/register", response_model=TokenResp)
 def register(body: AuthBody) -> TokenResp:
-    with Session(db.engine) as s, s.begin():
+    with Session(engine) as s, s.begin():
         if s.scalar(select(User).where(User.email == body.email)):
             raise HTTPException(status_code=400, detail="Email exists")
         user = User(
@@ -69,7 +69,7 @@ def register(body: AuthBody) -> TokenResp:
 
 @router.post("/login", response_model=TokenResp)
 def login(body: AuthBody) -> TokenResp:
-    with Session(db.engine) as s:
+    with Session(engine) as s:
         user = s.scalar(select(User).where(User.email == body.email))
         if not user or not pwd_context.verify(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid credentials")
