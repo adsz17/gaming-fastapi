@@ -22,7 +22,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if path.startswith("/auth/") or path == "/crash/round":
-            key = request.client.host or "anonymous"
+            client = request.client
+            key = client.host if client and client.host else "anonymous"
             if path == "/crash/round":
                 auth = request.headers.get("Authorization", "")
                 if auth.startswith("Bearer "):

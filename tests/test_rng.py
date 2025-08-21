@@ -1,13 +1,14 @@
 import os
-import hmac
 import hashlib
+import hmac
+
 from fastapi.testclient import TestClient
 
 # Ensure env vars before importing service
 os.environ.setdefault("ADMIN_TOKEN", "test-token")
 os.environ.setdefault("RNG_HOUSE_EDGE", "0.01")
 
-from backend.services.rng import app
+from backend.services.rng import SEEDS, app, hmac_sha256, verify_signature
 
 client = TestClient(app)
 
@@ -38,3 +39,10 @@ def test_distribution_not_constant():
     body = {"client_seed": "seed"}
     mults = [client.post("/rng/crash", json=body).json()["multiplier"] for _ in range(20)]
     assert len(set(mults)) > 1
+
+
+def test_verify_signature_util():
+    msg = "hello"
+    sig = hmac_sha256(SEEDS["server_seed"], msg)
+    assert verify_signature(msg, sig)
+    assert not verify_signature(msg, "bad")

@@ -17,6 +17,28 @@ uvicorn main:app --reload --port 8000
 
 Then open `http://127.0.0.1:8000/docs` for Swagger UI.
 
+Example usage:
+
+```bash
+# register and obtain JWT
+curl -sX POST localhost:8000/auth/register -d '{"email":"a@a.com","password":"pw"}' -H 'Content-Type: application/json'
+
+# deposit into wallet
+curl -sX POST localhost:8000/wallet/txn \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H 'Content-Type: application/json' \
+  -d '{"amount":10,"reason":"dep","idempotency_key":"abc"}'
+
+# play crash round
+curl -sX POST localhost:8000/crash/round \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H 'Content-Type: application/json' \
+  -d '{"bet":5,"client_seed":"seed","idem":"r1"}'
+
+# metrics
+curl localhost:8000/metrics
+```
+
 ## Database migrations
 
 Database schema changes are managed with Alembic. Set the `DATABASE_URL`
@@ -27,3 +49,13 @@ alembic upgrade head
 ```
 
 This will create or upgrade the tables in the configured database.
+
+## Tests
+
+Run linters, type checking and tests from the project root:
+
+```bash
+ruff check
+mypy --ignore-missing-imports backend
+pytest -q
+```

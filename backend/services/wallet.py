@@ -1,8 +1,8 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..models import Account, LedgerEntry
 
@@ -21,9 +21,11 @@ def apply_transaction(
     if existing:
         return existing
 
-    acc = session.get(Account, user_id)
+    acc = session.execute(
+        select(Account).where(Account.user_id == user_id).with_for_update()
+    ).scalar_one_or_none()
     if not acc:
-        acc = Account(user_id=user_id, balance=Decimal("0"))
+        acc = Account(user_id=user_id, balance=Decimal("100"))
         session.add(acc)
         session.flush()
 

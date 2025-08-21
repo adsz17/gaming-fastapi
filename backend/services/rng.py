@@ -1,14 +1,17 @@
-import os, hmac, hashlib
+import hashlib
+import hmac
+import os
+from typing import Any, Dict
+
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
-from typing import Dict
 
 HOUSE_EDGE = float(os.getenv("RNG_HOUSE_EDGE", "0.01"))
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 
 app = FastAPI(title="RNG Service")
 
-SEEDS: Dict[str, any] = {
+SEEDS: Dict[str, Any] = {
     "server_seed": os.urandom(32).hex(),
     "server_seed_hash": "",
     "nonce": 0
@@ -23,6 +26,12 @@ SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
 def hmac_sha256(server_seed_hex: str, message: str) -> str:
     key = bytes.fromhex(server_seed_hex)
     return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_signature(message: str, signature: str) -> bool:
+    """Verify an HMAC-SHA256 signature against the current server seed."""
+    expected = hmac_sha256(SEEDS["server_seed"], message)
+    return hmac.compare_digest(expected, signature)
 
 
 def hex_to_unit(hex_str: str) -> float:

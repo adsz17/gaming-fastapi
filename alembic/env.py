@@ -3,7 +3,6 @@ import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
-from sqlalchemy import create_engine
 from alembic import context
 
 import logging
@@ -22,12 +21,11 @@ logger = logging.getLogger('alembic.env')
 # add your model's MetaData object here
 # for 'autogenerate' support
 try:
-    from backend.main import Base
+    from backend.models import Base
 except ModuleNotFoundError:
-    # when running from backend directory
     import sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from backend.main import Base
+    from backend.models import Base
 
 target_metadata = Base.metadata
 
