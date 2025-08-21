@@ -10,4 +10,5 @@ COPY --from=builder /usr/local /usr/local
 COPY . .
 ENV PATH=/usr/local/bin:$PATH
 EXPOSE 8000
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "$PORT", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Use a shell command so the PORT environment variable is expanded at runtime
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'" ]
