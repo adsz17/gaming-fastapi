@@ -4,20 +4,17 @@ Separates a FastAPI backend and a Vite + React frontend.
 
 ## Environment variables
 
-### Backend (`backend/.env`)
+### Backend (Web Service)
 
-- `ENV` - environment name, default `production`.
-- `JWT_SECRET` - secret key for JWT tokens.
-- `DATABASE_URL` - database connection string.
-- `CORS_ORIGINS` - JSON array with allowed origins.
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `CORS_ORIGINS` = `["https://gaming-fastapi-1.onrender.com","http://localhost:5173"]`
 
-See `backend/.env.example`.
+### Frontend (Static Site)
 
-### Frontend (`frontend/.env`)
+- `VITE_API_URL` = `https://gaming-fastapi.onrender.com`
 
-- `VITE_API_URL` - base URL for the backend API.
-
-See `frontend/.env.example`.
+See the `.env.example` files in each folder.
 
 ## Run locally
 
@@ -27,32 +24,29 @@ See `frontend/.env.example`.
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn api.main:app --reload --port 8000
+uvicorn api.main:app --reload
 ```
 
 ### Frontend
 
 ```bash
-npm ci
+npm i
 npm run dev
 ```
 
-The frontend will be served on [http://localhost:5173](http://localhost:5173) and proxy API requests to the backend.
+The frontend runs on [http://localhost:5173](http://localhost:5173) and uses `VITE_API_URL` for API calls.
 
 ## Deploy on Render
 
 1. Commit all changes including `render.yaml`.
 2. Create a new Blueprint in Render pointing to this repository.
 3. The blueprint provisions a Static Site and a Python Web Service.
-4. Add the following Redirects/Rewrites to the Static Site:
-   - `/api/*` → `https://gaming-fastapi.onrender.com/api/:splat` (Rewrite)
-   - `/*` → `/index.html` (Rewrite)
-5. Set environment variables as shown above for each service.
+4. Static Site:
+   - **Build**: `npm ci && npm run build`
+   - **Publish**: `frontend/dist`
+   - Optional SPA rewrite: `/*` → `/index.html`
+5. Web Service:
+   - **Start**: `uvicorn api.main:app --host 0.0.0.0 --port 10000`
+6. Set the environment variables shown above for each service.
 
-The backend service runs:
-
-```
-uvicorn api.main:app --host 0.0.0.0 --port 10000
-```
-
-The static site publishes `frontend/dist` after running `npm ci && npm run build`.
+The backend exposes `GET /health` returning `{ "ok": true }`.

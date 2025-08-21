@@ -2,11 +2,12 @@
   "name": "gaming-fastapi",
   "version": "1.0.0",
   "description": "Auxiliary package for Render build; with frontend dependencies.",
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "TAILWIND_CONFIG=frontend/tailwind.config.js vite",
+    "build": "TAILWIND_CONFIG=frontend/tailwind.config.js vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "TAILWIND_CONFIG=frontend/tailwind.config.js vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -14,6 +15,9 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react-swc": "^3.5.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
   },
