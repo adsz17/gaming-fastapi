@@ -221,6 +221,10 @@ class Round(Base):
     result_json: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
+# ---------- Database ----------
+# The schema is managed via Alembic migrations. Tables are not
+# created automatically at runtime. Ensure `alembic upgrade head`
+# has been executed before starting the application.
 class Ledger(Base):
     __tablename__ = "ledger"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -233,7 +237,6 @@ class Ledger(Base):
 # ---------- Startup: create tables ----------
 @app.on_event("startup")
 def _startup():
-    Base.metadata.create_all(engine)
 
 # ---------- Provably Fair RNG (server-side) ----------
 SEEDS: dict[str, Any] = {
