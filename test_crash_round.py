@@ -1,4 +1,5 @@
-import os, types
+import os
+import types
 
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/db"
 
