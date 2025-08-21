@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-
+# backend/Dockerfile
 FROM python:3.12-slim AS builder
 WORKDIR /app
 COPY requirements.txt ./
@@ -10,4 +9,5 @@ WORKDIR /app
 COPY --from=builder /usr/local /usr/local
 COPY . .
 ENV PATH=/usr/local/bin:$PATH
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8000
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "$PORT", "--proxy-headers", "--forwarded-allow-ips", "*"]
