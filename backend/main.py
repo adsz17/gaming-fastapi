@@ -2,16 +2,16 @@ import os, hmac, hashlib, json, uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
-from sqlalchemy import (
-    create_engine, Numeric, String, Text, JSON, BigInteger,
-    func, select, ForeignKey, text
-)
-from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, Session, relationship
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from .models import Base, User, Account, Round, LedgerEntry
+from .services.wallet import apply_transaction
 
 from passlib.context import CryptContext
 from jose import jwt, JWTError
@@ -44,39 +44,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------- DB Models ----------
-class Base(DeclarativeBase): pass
-
-class User(Base):
-    __tablename__ = "users"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
-
-    account: Mapped["Account"] = relationship(back_populates="user", uselist=False)
-
-class Account(Base):
-    __tablename__ = "accounts"
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    balance: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("0"))
-    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
-
-    user: Mapped[User] = relationship(back_populates="account")
-
-class Round(Base):
-    __tablename__ = "rounds"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(36), index=True)
-    game_code: Mapped[str] = mapped_column(String(50), default="crash_v1")
-    bet: Mapped[Decimal] = mapped_column(Numeric(18, 6))
-    payout: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("0"))
-    server_seed_hash: Mapped[str] = mapped_column(Text)
-    client_seed: Mapped[str] = mapped_column(Text)
-    nonce: Mapped[int] = mapped_column(BigInteger)
-    result_json: Mapped[dict] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 # ---------- Startup: create tables ----------
 @app.on_event("startup")
@@ -128,24 +95,20 @@ def create_token(user_id: str, email: str) -> str:
                "exp": int((now + timedelta(minutes=JWT_MINUTES)).timestamp())}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
-def get_current_user(session: Session = Depends(lambda: Session(engine))):
-    from fastapi import Request
-    # Simple Bearer extractor
-    def _dep(request: "Request"):
-        auth = request.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            raise HTTPException(401, "Missing Bearer token")
-        token = auth.split(" ", 1)[1]
-        try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-        except JWTError:
-            raise HTTPException(401, "Invalid or expired token")
-        uid = payload.get("sub")
-        user = session.get(User, uid)
-        if not user:
-            raise HTTPException(401, "User not found")
-        return user
-    return _dep
+def get_current_user(request: Request, session: Session = Depends(lambda: Session(engine))):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Missing Bearer token")
+    token = auth.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except JWTError:
+        raise HTTPException(401, "Invalid or expired token")
+    uid = payload.get("sub")
+    user = session.get(User, uid)
+    if not user:
+        raise HTTPException(401, "User not found")
+    return user
 
 @app.post("/auth/register", response_model=TokenOut)
 def register(body: RegisterIn):
@@ -170,7 +133,7 @@ def login(body: LoginIn):
         return {"token": create_token(u.id, u.email)}
 
 @app.get("/me")
-def me(user: User = Depends(get_current_user())):
+def me(user: User = Depends(get_current_user)):
     return {"id": user.id, "email": user.email, "created_at": user.created_at}
 
 # ---------- Game endpoints ----------
@@ -192,18 +155,35 @@ class RoundOut(BaseModel):
 class HistoryResp(BaseModel):
     rounds: List[RoundOut]
 
+class WalletTxnIn(BaseModel):
+    amount: float
+    reason: str
+    idempotency_key: str
+
+class WalletTxnOut(BaseModel):
+    entry_id: int
+    balance: float
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 @app.get("/account")
-def account(user: User = Depends(get_current_user())):
+def account(user: User = Depends(get_current_user)):
     with Session(engine) as s:
         acc = s.get(Account, user.id)
         return {"balance": float(acc.balance)}
 
+@app.post("/wallet/txn", response_model=WalletTxnOut)
+def wallet_txn(body: WalletTxnIn, user: User = Depends(get_current_user)):
+    amount_dec = Decimal(str(round(body.amount, 6)))
+    with Session(engine) as s:
+        with s.begin():
+            entry = apply_transaction(s, user.id, amount_dec, body.reason, body.idempotency_key)
+        return {"entry_id": entry.id, "balance": float(entry.balance_after)}
+
 @app.post("/round", response_model=RoundOut)
-def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
+def play_round(body: BetRoundIn, user: User = Depends(get_current_user)):
     if body.bet <= 0:
         raise HTTPException(400, "Bet must be > 0")
 
@@ -256,7 +236,7 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
         )
 
 @app.get("/history", response_model=HistoryResp)
-def history(limit: int = 20, user: User = Depends(get_current_user())):
+def history(limit: int = 20, user: User = Depends(get_current_user)):
     with Session(engine) as s:
         q = (
             select(Round)
