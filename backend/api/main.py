@@ -1,3 +1,5 @@
+import os
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -19,15 +21,16 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-# Allowed origins for CORS (exact, without trailing slash)
-ALLOWED_ORIGINS = [
-    "https://gaming-fastapi-1.onrender.com",
-    "http://localhost:5173",
-]
+raw = os.getenv("CORS_ORIGINS", "[]")
+try:
+    ORIGINS = json.loads(raw)
+except Exception:
+    ORIGINS = [o.strip() for o in raw.split(",") if o.strip()]
+ORIGINS = [o.rstrip("/") for o in ORIGINS]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
