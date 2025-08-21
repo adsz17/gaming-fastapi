@@ -21,20 +21,25 @@ JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
 JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@localhost:5432/igaming"
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=5,
+    pool_recycle=1800,
 )
-
-engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI(title="iGaming Starter - Postgres/JWT", version="0.2.0")
 
+ALLOWED = os.getenv("ALLOWED_ORIGINS", "*")
+origins = [o.strip() for o in ALLOWED.split(",")] if ALLOWED else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8080", "http://localhost:8080"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -189,7 +194,7 @@ class HistoryResp(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "server_seed_hash": SEEDS["server_seed_hash"], "nonce": SEEDS["nonce"]}
+    return {"status": "ok"}
 
 @app.get("/account")
 def account(user: User = Depends(get_current_user())):
