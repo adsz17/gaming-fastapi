@@ -2,7 +2,7 @@ import os, hmac, hashlib, json, uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
@@ -20,6 +20,7 @@ from jose import jwt, JWTError
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-please")
 JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-token")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(
@@ -44,6 +45,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------- Admin Auth ----------
+def require_admin(x_admin_token: str = Header(..., alias="X-Admin-Token")):
+    if x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(401, "Invalid admin token")
 
 # ---------- DB Models ----------
 class Base(DeclarativeBase): pass
@@ -76,6 +82,15 @@ class Round(Base):
     client_seed: Mapped[str] = mapped_column(Text)
     nonce: Mapped[int] = mapped_column(BigInteger)
     result_json: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+class Ledger(Base):
+    __tablename__ = "ledger"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    balance: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    meta: Mapped[dict] = mapped_column(JSON, default={})
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 # ---------- Startup: create tables ----------
@@ -213,24 +228,15 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
             acc = Account(user_id=user.id, balance=Decimal("0"))
             s.add(acc)
             s.flush()
-
         bet_dec = Decimal(str(round(body.bet, 6)))
         if acc.balance < bet_dec:
             raise HTTPException(400, "Insufficient balance")
 
-        # 1) Debitar
-        acc.balance -= bet_dec
-
-        # 2) Generar resultado
         SEEDS["nonce"] += 1
         nonce = SEEDS["nonce"]
         mult = crash_multiplier(SEEDS["server_seed"], body.client_seed, nonce)
         payout = Decimal(str(round(body.bet * mult, 2)))
 
-        # 3) Acreditar
-        acc.balance += payout
-
-        # 4) Persistir ronda
         row = Round(
             user_id=user.id,
             bet=bet_dec,
@@ -241,6 +247,14 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
             result_json={"multiplier": mult},
         )
         s.add(row)
+        s.flush()
+
+        acc.balance -= bet_dec
+        s.add(Ledger(user_id=user.id, amount=-bet_dec, balance=acc.balance, meta={"type": "bet", "round_id": row.id}))
+
+        acc.balance += payout
+        s.add(Ledger(user_id=user.id, amount=payout, balance=acc.balance, meta={"type": "payout", "round_id": row.id}))
+
         s.commit()
         s.refresh(row)
         return RoundOut(
@@ -287,3 +301,49 @@ def rotate_seed():
     SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
     SEEDS["nonce"] = 0
     return {"ok": True, "old_server_seed_hash": old_hash, "new_server_seed_hash": SEEDS["server_seed_hash"]}
+
+# ---------- Admin Endpoints ----------
+@app.get("/admin/rounds")
+def admin_rounds(limit: int = 100, _: str = Depends(require_admin)):
+    with Session(engine) as s:
+        q = select(Round).order_by(Round.id.desc()).limit(limit)
+        items = s.scalars(q).all()
+        out = []
+        for r in items:
+            out.append({
+                "id": r.id,
+                "user_id": r.user_id,
+                "bet": float(r.bet),
+                "payout": float(r.payout),
+                "created_at": r.created_at.isoformat(),
+            })
+        return {"rounds": out}
+
+@app.get("/admin/ledger")
+def admin_ledger(user_id: Optional[str] = None, limit: int = 100, _: str = Depends(require_admin)):
+    with Session(engine) as s:
+        q = select(Ledger)
+        if user_id:
+            q = q.where(Ledger.user_id == user_id)
+        q = q.order_by(Ledger.id.desc()).limit(limit)
+        items = s.scalars(q).all()
+        out = []
+        for l in items:
+            out.append({
+                "id": l.id,
+                "user_id": l.user_id,
+                "amount": float(l.amount),
+                "balance": float(l.balance),
+                "meta": l.meta,
+                "created_at": l.created_at.isoformat(),
+            })
+        return {"ledger": out}
+
+@app.post("/admin/rng/rotate")
+def admin_rotate_rng(_: str = Depends(require_admin)):
+    return rotate_seed()
+
+# ---------- Static Files ----------
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/", StaticFiles(directory="public", html=True), name="public")
