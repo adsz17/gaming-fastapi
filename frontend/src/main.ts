@@ -1,3 +1,1 @@
-import { initRegisterPage } from "./pages/register";
-
-initRegisterPage();
+import "./auth";

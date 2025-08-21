@@ -15,7 +15,7 @@ See `backend/.env.example`.
 
 ### Frontend (`frontend/.env`)
 
-- `VITE_API_URL` - base URL for the backend API.
+- `VITE_API_URL` - base URL for the backend API (optional, defaults to same origin).
 
 See `frontend/.env.example`.
 
@@ -56,3 +56,16 @@ uvicorn api.main:app --host 0.0.0.0 --port 10000
 ```
 
 The static site publishes `frontend/dist` after running `npm ci && npm run build`.
+
+## Quick QA
+
+### Development
+
+1. Run the backend on port `8000`.
+2. In another terminal, run `npm run dev`.
+3. Use the register form to send a `POST` request to `/api/auth/register`.
+
+### Production (Render)
+
+The frontend on `https://gaming-fastapi-1.onrender.com` should issue requests to
+`https://gaming-fastapi.onrender.com` via the `/api/*` rewrite.

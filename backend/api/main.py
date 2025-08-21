@@ -5,7 +5,6 @@ from types import ModuleType
 from typing import Optional
 
 from .middleware.ratelimit import RateLimitMiddleware
-from .settings import settings
 from .auth import router as auth_router
 
 # Routers (importá solo los que existan en tu proyecto)
@@ -20,9 +19,14 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
+origins = [
+    "http://localhost:5173",
+    "https://gaming-fastapi-1.onrender.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(o) for o in settings.CORS_ORIGINS] or ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
