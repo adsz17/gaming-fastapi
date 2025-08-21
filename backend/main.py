@@ -1,3 +1,5 @@
+import os, hmac, hashlib, json, uuid, httpx
+
 import os, hmac, hashlib, json, uuid, logging, time, contextvars
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -11,6 +13,7 @@ import hashlib
 import hmac
 import os
 import uuid
+ main
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -28,6 +31,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
+
+from sqlalchemy import (
+    create_engine, Numeric, String, Text, JSON, BigInteger, Integer,
+    func, select, ForeignKey, text, UniqueConstraint
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -116,6 +123,9 @@ engine = create_engine(
     max_overflow=5,
     pool_recycle=1800,
 )
+
+WALLET_URL = os.getenv("WALLET_URL", "http://wallet:8000")
+RNG_URL = os.getenv("RNG_URL", "http://rng:8000")
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -217,7 +227,8 @@ class Account(Base):
 
 class Round(Base):
     __tablename__ = "rounds"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    __table_args__ = (UniqueConstraint("user_id", "idem"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(36), index=True)
     game_code: Mapped[str] = mapped_column(String(50), default="crash_v1")
     bet: Mapped[Decimal] = mapped_column(Numeric(18, 6))
@@ -226,6 +237,7 @@ class Round(Base):
     client_seed: Mapped[str] = mapped_column(Text)
     nonce: Mapped[int] = mapped_column(BigInteger)
     result_json: Mapped[dict] = mapped_column(JSON)
+    idem: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 # ---------- Database ----------
@@ -340,6 +352,11 @@ class BetRoundIn(BaseModel):
     bet: float
     client_seed: str
 
+class CrashRoundIn(BaseModel):
+    bet: float
+    client_seed: str
+    idem: str
+
 class RoundOut(BaseModel):
     round_id: int
     bet: float
@@ -374,6 +391,102 @@ def account(user: User = Depends(get_current_user)):
         if acc is None:
             raise HTTPException(404, "Account not found")
         return {"balance": float(acc.balance)}
+
+@app.post("/crash/round", response_model=RoundOut)
+def crash_round(body: CrashRoundIn, user: User = Depends(get_current_user())):
+    if body.bet <= 0:
+        raise HTTPException(400, "Bet must be > 0")
+
+    with Session(engine) as s:
+        existing = s.scalar(select(Round).where(Round.user_id == user.id, Round.idem == body.idem))
+        if existing:
+            return RoundOut(
+                round_id=existing.id,
+                bet=float(existing.bet),
+                payout=float(existing.payout),
+                multiplier=float(existing.result_json.get("multiplier", 0)),
+                new_balance=-1.0,
+                server_seed_hash=existing.server_seed_hash,
+                client_seed=existing.client_seed,
+                nonce=existing.nonce,
+                created_at=existing.created_at.isoformat()
+            )
+
+        bet_dec = Decimal(str(round(body.bet, 6)))
+
+        try:
+            r1 = httpx.post(
+                f"{WALLET_URL}/txn",
+                json={"amount": -float(bet_dec), "idempotency_key": f"{body.idem}:bet"},
+                headers={"X-User-Id": user.id},
+            )
+            r1.raise_for_status()
+        except Exception:
+            raise HTTPException(502, "wallet debit failed")
+
+        try:
+            r2 = httpx.post(f"{RNG_URL}/crash", json={"client_seed": body.client_seed})
+            r2.raise_for_status()
+            rng_data = r2.json()
+            mult = float(rng_data["multiplier"])
+            nonce = int(rng_data["nonce"])
+            server_seed_hash = rng_data["server_seed_hash"]
+        except Exception:
+            try:
+                httpx.post(
+                    f"{WALLET_URL}/txn",
+                    json={"amount": float(bet_dec), "idempotency_key": f"{body.idem}:refund"},
+                    headers={"X-User-Id": user.id},
+                )
+            except Exception:
+                pass
+            raise HTTPException(502, "rng failed")
+
+        payout = Decimal(str(round(float(bet_dec) * mult, 2)))
+
+        try:
+            r3 = httpx.post(
+                f"{WALLET_URL}/txn",
+                json={"amount": float(payout), "idempotency_key": f"{body.idem}:payout"},
+                headers={"X-User-Id": user.id},
+            )
+            r3.raise_for_status()
+            new_balance = float(r3.json().get("balance", 0))
+        except Exception:
+            try:
+                httpx.post(
+                    f"{WALLET_URL}/txn",
+                    json={"amount": float(bet_dec), "idempotency_key": f"{body.idem}:refund"},
+                    headers={"X-User-Id": user.id},
+                )
+            except Exception:
+                pass
+            raise HTTPException(502, "wallet payout failed")
+
+        row = Round(
+            user_id=user.id,
+            bet=bet_dec,
+            payout=payout,
+            server_seed_hash=server_seed_hash,
+            client_seed=body.client_seed,
+            nonce=nonce,
+            result_json={"multiplier": mult},
+            idem=body.idem,
+        )
+        s.add(row)
+        s.commit()
+        s.refresh(row)
+        return RoundOut(
+            round_id=row.id,
+            bet=float(row.bet),
+            payout=float(row.payout),
+            multiplier=mult,
+            new_balance=new_balance,
+            server_seed_hash=row.server_seed_hash,
+            client_seed=row.client_seed,
+            nonce=row.nonce,
+            created_at=row.created_at.isoformat()
+        )
 
 @app.post("/wallet/txn", response_model=WalletTxnOut)
 def wallet_txn(body: WalletTxnIn, user: User = Depends(get_current_user)):

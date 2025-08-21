@@ -1,6 +1,6 @@
 -- Minimal Postgres schema (optional; replace in-memory)
 CREATE TABLE IF NOT EXISTS rounds (
-  id BIGSERIAL PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   user_id UUID NOT NULL,
   game_code TEXT NOT NULL DEFAULT 'crash_v1',
   bet NUMERIC(18,6) NOT NULL CHECK (bet > 0),
@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS rounds (
   client_seed TEXT NOT NULL,
   nonce BIGINT NOT NULL,
   result_json JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  idem TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, idem)
 );
 
 CREATE INDEX IF NOT EXISTS idx_rounds_user ON rounds(user_id);
