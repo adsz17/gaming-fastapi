@@ -5,7 +5,9 @@ from importlib import reload
 
 from fastapi.testclient import TestClient
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
+)
 
 
 def create_client(exp: str, limit: int | None = None) -> TestClient:
@@ -13,7 +15,11 @@ def create_client(exp: str, limit: int | None = None) -> TestClient:
     os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
     if limit is not None:
         os.environ["RATE_LIMIT_PER_MIN"] = str(limit)
-    import backend.main as main
+    import api.db as db
+    import api.auth as auth
+    import api.main as main
+    reload(db)
+    reload(auth)
     reload(main)
     return TestClient(main.app)
 

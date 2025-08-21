@@ -1,4 +1,7 @@
+import os
+import sys
 import types
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,8 +9,15 @@ from prometheus_client import CollectorRegistry, Counter
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-from backend import main
-from backend.models import Base
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT / "backend"))
+os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/test"
+
+import api.main as main
+from api.models import Base
+import api.db as db
+import api.routers.crash as crash_router
+import api.routers.metrics as metrics_router
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +28,8 @@ def client():
         poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
-    main.engine = engine
+    db.engine = engine
+    db.SessionLocal.configure(bind=engine)
 
     user = types.SimpleNamespace(id="u1", email="u@example.com")
     dep = None
@@ -41,13 +52,14 @@ def client():
 
         return Resp()
 
-    main.WALLET_URL = "http://wallet"
-    main.RNG_URL = "http://rng"
-    main.httpx.post = fake_post  # type: ignore
-    main.registry = CollectorRegistry()
-    main.rtp_observed = Counter(
-        "rtp_observed", "Observed Return To Player", registry=main.registry
+    crash_router.WALLET_URL = "http://wallet"
+    crash_router.RNG_URL = "http://rng"
+    crash_router.httpx.post = fake_post  # type: ignore
+    metrics_router.registry = CollectorRegistry()
+    metrics_router.rtp_observed = Counter(
+        "rtp_observed", "Observed Return To Player", registry=metrics_router.registry
     )
+    crash_router.rtp_observed = metrics_router.rtp_observed
     return TestClient(main.app)
 
 

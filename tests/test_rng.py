@@ -1,4 +1,6 @@
 import os
+import sys
+from pathlib import Path
 import hashlib
 import hmac
 
@@ -8,7 +10,10 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("ADMIN_TOKEN", "test-token")
 os.environ.setdefault("RNG_HOUSE_EDGE", "0.01")
 
-from backend.services.rng import SEEDS, app, hmac_sha256, verify_signature
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT / "backend"))
+
+from api.services.rng import SEEDS, app, hmac_sha256, verify_signature
 
 client = TestClient(app)
 
