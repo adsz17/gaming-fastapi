@@ -5,7 +5,13 @@ export default defineConfig({
   root: 'frontend',
   plugins: [react()],
   build: { outDir: 'dist', emptyOutDir: true },
-  server: { port: 5173 },
-  preview: { port: 5173 },
+  server: {
+    port: 5173,
+    proxy: { "/api": "http://localhost:8000" }
+  },
+  preview: {
+    port: 5173,
+    proxy: { "/api": "http://localhost:8000" }
+  },
 })
 
