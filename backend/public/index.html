@@ -6,5 +6,242 @@
 </head>
 <body>
   <h1>FastAPI is running</h1>
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crash MVP - Auth + Balance</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: system-ui, sans-serif; margin:0; background:#0f1220; color:#eaeaf2; }
+    header { padding:16px; background:#141833; }
+    .wrap { padding:16px; max-width:960px; margin:0 auto; }
+    .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
+    .card { background:#10142a; border-radius:14px; padding:16px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    input, button {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #2a2f55;
+      background: #1b2045; color: #fff; outline: none;
+    }
+    button { cursor: pointer; }
+    .pill { background:#0b0e1d; border:1px solid #2a2f55; border-radius:999px; padding:6px 10px; }
+    .log { margin-top:12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background:#0b0e1d; padding:12px; border-radius:8px; height:180px; overflow:auto; }
+    canvas { border-radius:12px; }
+    .header-row { display:flex; justify-content:space-between; align-items:center; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.2.5/pixi.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="wrap header-row">
+      <div>
+        <h1>Crash MVP</h1>
+        <p>Provably fair + JWT + Balance</p>
+      </div>
+      <div class="row">
+        <span class="pill" id="status">Desconectado</span>
+        <span class="pill" id="balance">Balance: -</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap grid">
+    <!-- Auth -->
+    <div class="card">
+      <div class="row">
+        <input id="email" type="email" placeholder="email@example.com" />
+        <input id="password" type="password" placeholder="password" />
+        <button id="btnRegister">Registrar</button>
+        <button id="btnLogin">Login</button>
+        <button id="btnLogout">Logout</button>
+      </div>
+    </div>
+
+    <!-- Juego -->
+    <div class="card">
+      <div class="row">
+        <label>Apuesta</label>
+        <input id="bet" type="number" step="0.01" value="1.00"/>
+        <label>Client Seed</label>
+        <input id="clientSeed" type="text"/>
+        <button id="btnNewSeed">↻</button>
+        <button id="playBtn">Jugar</button>
+      </div>
+      <div id="stage" style="margin-top: 16px;"></div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <!-- Historial -->
+    <div class="card">
+      <b>Historial</b>
+      <div class="log" id="historyLog"></div>
+    </div>
+  </div>
+
+<script>
+const statusEl = document.getElementById("status");
+const balEl = document.getElementById("balance");
+const emailEl = document.getElementById("email");
+const passEl = document.getElementById("password");
+const btnReg = document.getElementById("btnRegister");
+const btnLogin = document.getElementById("btnLogin");
+const btnLogout = document.getElementById("btnLogout");
+const betEl = document.getElementById("bet");
+const csEl = document.getElementById("clientSeed");
+const btnNewSeed = document.getElementById("btnNewSeed");
+const playBtn = document.getElementById("playBtn");
+const logEl = document.getElementById("log");
+const historyEl = document.getElementById("historyLog");
+
+function setToken(t){ localStorage.setItem("token", t); }
+function getToken(){ return localStorage.getItem("token"); }
+function clearToken(){ localStorage.removeItem("token"); }
+function isAuthed(){ return !!getToken(); }
+
+function genClientSeed(){
+  const arr = new Uint8Array(16); crypto.getRandomValues(arr);
+  return Array.from(arr, b=>b.toString(16).padStart(2, '0')).join('');
+}
+function assignSeed(){ csEl.value = genClientSeed(); }
+btnNewSeed.onclick = assignSeed; assignSeed();
+
+function log(s){
+  const t = new Date().toLocaleTimeString();
+  logEl.innerHTML = `[${t}] ${s}<br/>` + logEl.innerHTML;
+}
+
+async function refreshHUD(){
+  if(!isAuthed()){
+    statusEl.textContent = "Desconectado";
+    balEl.textContent = "Balance: -";
+    historyEl.innerHTML = "";
+    return;
+  }
+  statusEl.textContent = "Conectado";
+  try{
+    const r = await fetch("/account", { headers:{ Authorization: "Bearer " + getToken() } });
+    if(r.ok){
+      const j = await r.json();
+      balEl.textContent = "Balance: " + Number(j.balance).toFixed(2);
+    }else{
+      statusEl.textContent = "Token inválido"; clearToken();
+    }
+  }catch(e){ statusEl.textContent = "Error"; }
+}
+
+async function loadHistory(){
+  if(!isAuthed()) return;
+  try{
+    const r = await fetch("/history", { headers:{ Authorization: "Bearer " + getToken() } });
+    if(r.ok){
+      const j = await r.json();
+      historyEl.innerHTML = j.rounds.map(r=>`#${r.round_id} x${r.multiplier} bet ${r.bet} payout ${r.payout}`).join('<br/>');
+    }
+  }catch(e){ historyEl.textContent = "Error"; }
+}
+
+btnReg.onclick = async () => {
+  const email = emailEl.value.trim(), password = passEl.value;
+  if(!email || !password) return alert("Completá email y password");
+  const r = await fetch("/auth/register", {
+    method: "POST", headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  const j = await r.json();
+  if(r.ok){ setToken(j.token); log("Registro OK (+100 de bienvenida)"); refreshHUD(); loadHistory(); }
+  else log("Error: " + JSON.stringify(j));
+};
+
+btnLogin.onclick = async () => {
+  const email = emailEl.value.trim(), password = passEl.value;
+  if(!email || !password) return alert("Completá email y password");
+  const r = await fetch("/auth/login", {
+    method: "POST", headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  const j = await r.json();
+  if(r.ok){ setToken(j.token); log("Login OK"); refreshHUD(); loadHistory(); }
+  else log("Error: " + JSON.stringify(j));
+};
+
+btnLogout.onclick = () => { clearToken(); refreshHUD(); historyEl.innerHTML=""; log("Logout"); };
+
+// ---- PIXI ----
+const app = new PIXI.Application();
+await app.init({ width: 960, height: 320, background: "#0b0e1d", antialias: true });
+document.getElementById("stage").appendChild(app.canvas);
+
+const rail = new PIXI.Graphics().roundRect(20, 140, 920, 10, 5).fill({color: 0x2e3355});
+app.stage.addChild(rail);
+
+let bar = new PIXI.Graphics().roundRect(20, 140, 0, 10, 5).fill({color: 0x6ee7ff});
+app.stage.addChild(bar);
+
+const head = new PIXI.Graphics().circle(20, 145, 7).fill({color: 0x6ee7ff});
+app.stage.addChild(head);
+
+const label = new PIXI.Text({ text: "x1.00", style: { fill: "#eaeaf2", fontSize: 32, fontWeight: "bold" } });
+label.x = 20; label.y = 90; app.stage.addChild(label);
+
+function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+let currentAnim = null;
+function resetBar(){
+  bar.clear().roundRect(20, 140, 0, 10, 5).fill({color: 0x6ee7ff});
+  head.clear().circle(20, 145, 7).fill({color: 0x6ee7ff});
+  label.text = "x1.00";
+}
+
+function animateToMultiplier(mult){
+  if (currentAnim) app.ticker.remove(currentAnim);
+  resetBar();
+  const maxW = 920, maxM = 100.0;
+  const targetW = Math.min(maxW, (mult / maxM) * maxW);
+  const durationMs = 2000;
+  const start = performance.now();
+  currentAnim = () => {
+    const t = Math.min(1, (performance.now() - start) / durationMs);
+    const p = easeOutCubic(t);
+    const w = targetW * p;
+    bar.clear().roundRect(20, 140, w, 10, 5).fill({color: 0x6ee7ff});
+    head.clear().circle(20 + w, 145, 7).fill({color: 0x6ee7ff});
+    label.text = "x" + (1 + (mult - 1) * p).toFixed(2);
+    if (t >= 1) app.ticker.remove(currentAnim);
+  };
+  app.ticker.add(currentAnim);
+}
+
+playBtn.onclick = async () => {
+  if(!isAuthed()) return alert("Primero logeate");
+  const bet = parseFloat(betEl.value);
+  const client_seed = csEl.value || genClientSeed();
+  if (!(bet > 0)) return alert("Bet > 0");
+  try{
+    const r = await fetch("/crash/round", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + getToken()
+      },
+      body: JSON.stringify({ bet, client_seed })
+    });
+    const j = await r.json();
+    if (r.ok){
+      log(`ROUND #${j.round_id} → multiplier x${j.multiplier} | payout ${j.payout} | balance ${j.new_balance}`);
+      animateToMultiplier(j.multiplier);
+      balEl.textContent = "Balance: " + Number(j.new_balance).toFixed(2);
+      loadHistory();
+    } else {
+      log("Error: " + JSON.stringify(j));
+    }
+  }catch(e){
+    console.error(e); log("Network error");
+  }
+};
+
+refreshHUD();
+loadHistory();
+</script>
 </body>
 </html>
