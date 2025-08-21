@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-import os
 from types import ModuleType
 from typing import Optional
 
 from .middleware.ratelimit import RateLimitMiddleware
+from .settings import settings
 from .auth import router as auth_router
 
 # Routers (importá solo los que existan en tu proyecto)
@@ -20,26 +20,24 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-# CORS
-_raw_origins = os.getenv("CORS_ORIGINS", "")
-origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-if not origins:
-    # Permitir todo si no se define (útil para pruebas)
-    origins = ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[str(o) for o in settings.CORS_ORIGINS] or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(RateLimitMiddleware)
 
-# Healthcheck
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"ok": True}
+
+
+@app.get("/version")
+def version():
+    return {"version": "1.0.0"}
 
 # Redirect root to Swagger docs, handling both GET and HEAD
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
@@ -57,7 +55,7 @@ if metrics:
     app.include_router(metrics.router, tags=["default"])
 
 # Auth router
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(auth_router)
 
 # Local run
 if __name__ == "__main__":

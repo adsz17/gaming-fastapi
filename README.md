@@ -1,31 +1,58 @@
-# iGaming Starter (FastAPI + PixiJS)
+# Gaming FastAPI
 
-**Qué trae:**
-- Backend FastAPI con RNG "provably fair" (server_seed hash publicado, client_seed, nonce).
-- Endpoints `/health`, `/bets`, `/round`, `/history`, `/seeds/rotate`.
-- Frontend HTML5 con PixiJS (crash MVP visual).
+Separates a FastAPI backend and a Vite + React frontend.
 
-## Cómo correr
-1) **Backend**
+## Environment variables
+
+### Backend (`backend/.env`)
+
+- `ENV` - environment name, default `production`.
+- `JWT_SECRET` - secret key for JWT tokens.
+- `DATABASE_URL` - database connection string.
+- `CORS_ORIGINS` - JSON array with allowed origins.
+
+See `backend/.env.example`.
+
+### Frontend (`frontend/.env`)
+
+- `VITE_API_URL` - base URL for the backend API.
+
+See `frontend/.env.example`.
+
+## Run locally
+
+### Backend
+
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn api.main:app --reload --port 8000
 ```
-Abrí `http://127.0.0.1:8000/docs` para probar.
 
-2) **Frontend**
-Primero abrí `frontend/login.html` para loguearte o registrarte. Luego serás redirigido a `index.html` (el juego).
-Si tu navegador bloquea CORS, servilo con un servercito local, por ejemplo:
+### Frontend
+
 ```bash
-# en la carpeta frontend
-python -m http.server 8080
-# luego visitá http://127.0.0.1:8080
+npm ci
+npm run dev
 ```
 
-## Siguientes pasos
-- Persistencia real en Postgres (ver `backend/schema.sql`).
-- Autenticación (JWT), límites de apuesta y saldos reales.
-- Simulador de RTP y telemetría.
-- Skins y assets.
+The frontend will be served on [http://localhost:5173](http://localhost:5173) and proxy API requests to the backend.
+
+## Deploy on Render
+
+1. Commit all changes including `render.yaml`.
+2. Create a new Blueprint in Render pointing to this repository.
+3. The blueprint provisions a Static Site and a Python Web Service.
+4. Add the following Redirects/Rewrites to the Static Site:
+   - `/api/*` → `https://gaming-fastapi.onrender.com/api/:splat` (Rewrite)
+   - `/*` → `/index.html` (Rewrite)
+5. Set environment variables as shown above for each service.
+
+The backend service runs:
+
+```
+uvicorn api.main:app --host 0.0.0.0 --port 10000
+```
+
+The static site publishes `frontend/dist` after running `npm ci && npm run build`.

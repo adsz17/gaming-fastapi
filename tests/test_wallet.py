@@ -43,9 +43,9 @@ def _auth_header(token: str):
 
 
 def _register_user(email: str = "a@example.com", password: str = "secret"):
-    resp = client.post("/auth/register", json={"email": email, "password": password})
+    resp = client.post("/api/auth/register", json={"email": email, "username": "u", "password": password})
     assert resp.status_code == 200
-    return resp.json()["token"]
+    return resp.json()["access_token"]
 
 
 def test_idempotent_txn():
