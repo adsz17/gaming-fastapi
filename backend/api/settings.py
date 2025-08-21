@@ -1,15 +1,18 @@
-from pydantic import BaseModel
-from dotenv import load_dotenv
-import os
+from pydantic import AnyHttpUrl
+from pydantic_settings import BaseSettings
+from typing import List
 
-load_dotenv()
 
-class Settings(BaseModel):
-    ENV: str = os.getenv("ENV", "development")
-    DATABASE_URL: str | None = os.getenv("DATABASE_URL")
-    ALLOWED_ORIGINS: list[str] = [
-        o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
-        if o.strip()
-    ]
+class Settings(BaseSettings):
+    ENV: str = "production"
+    JWT_SECRET: str = "changeme"  # se sobreescribe por env
+    JWT_EXPIRES_MIN: int = 60
+    DATABASE_URL: str = ""
+    CORS_ORIGINS: List[AnyHttpUrl] = []
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
 
 settings = Settings()
