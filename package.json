@@ -1,12 +1,21 @@
 {
   "name": "gaming-fastapi",
   "version": "1.0.0",
-  "description": "Auxiliary package for Render build; no dependencies.",
+  "description": "Auxiliary package for Render build; with frontend dependencies.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react-swc": "^3.5.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0"
   },
   "license": "ISC"
 }
