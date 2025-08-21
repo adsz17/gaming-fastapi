@@ -4,12 +4,19 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
 from typing import Any, List
+
+from pathlib import Path
+
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+
+from fastapi.responses import FileResponse
+
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import (
     JSON,
@@ -269,6 +276,10 @@ def play_round(body: BetRoundIn, user: User = Depends(get_current_user())):
             created_at=row.created_at.isoformat()
         )
 
+@app.post("/crash/round", response_model=RoundOut)
+def play_round_alias(body: BetRoundIn, user: User = Depends(get_current_user())):
+    return play_round(body, user)
+
 @app.get("/history", response_model=HistoryResp)
 def history(limit: int = 20, user: User = Depends(get_current_user())):
     with Session(engine) as s:
@@ -301,3 +312,8 @@ def rotate_seed():
     SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
     SEEDS["nonce"] = 0
     return {"ok": True, "old_server_seed_hash": old_hash, "new_server_seed_hash": SEEDS["server_seed_hash"]}
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).parent / "public" / "index.html")
