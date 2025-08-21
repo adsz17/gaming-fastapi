@@ -1,9 +1,11 @@
 import os, hmac, hashlib, json, uuid
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
@@ -287,3 +289,7 @@ def rotate_seed():
     SEEDS["server_seed_hash"] = _hash_seed(SEEDS["server_seed"])
     SEEDS["nonce"] = 0
     return {"ok": True, "old_server_seed_hash": old_hash, "new_server_seed_hash": SEEDS["server_seed_hash"]}
+
+
+BASE_DIR = Path(__file__).resolve().parent
+app.mount("/", StaticFiles(directory=BASE_DIR / "public", html=True), name="public")
