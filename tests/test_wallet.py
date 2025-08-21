@@ -8,13 +8,14 @@ from sqlalchemy import create_engine, select, func
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-# Ensure project root on path and set dummy DATABASE_URL before importing app
+# Ensure project backend on path and set dummy DATABASE_URL before importing app
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT))
+sys.path.append(str(ROOT / "backend"))
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/test"
 
-from backend import main  # noqa: E402
-from backend.models import Base, LedgerEntry  # noqa: E402
+import api.main as main  # noqa: E402
+from api.models import Base, LedgerEntry  # noqa: E402
+import api.db as db  # noqa: E402
 
 
 test_engine = create_engine(
@@ -22,17 +23,18 @@ test_engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
-main.engine = test_engine
-Base.metadata.drop_all(main.engine)
-Base.metadata.create_all(main.engine)
+db.engine = test_engine
+db.SessionLocal.configure(bind=test_engine)
+Base.metadata.drop_all(db.engine)
+Base.metadata.create_all(db.engine)
 
 client = TestClient(main.app)
 
 
 @pytest.fixture(autouse=True)
 def _fresh_db():
-    Base.metadata.drop_all(main.engine)
-    Base.metadata.create_all(main.engine)
+    Base.metadata.drop_all(db.engine)
+    Base.metadata.create_all(db.engine)
     yield
 
 
@@ -56,7 +58,7 @@ def test_idempotent_txn():
     r2 = client.post("/wallet/txn", json=body, headers=headers)
     assert r2.status_code == 200
     assert r2.json() == r1.json()
-    with Session(main.engine) as s:
+    with Session(db.engine) as s:
         count = s.scalar(select(func.count()).select_from(LedgerEntry))
         assert count == 1
 
@@ -67,6 +69,6 @@ def test_insufficient_funds():
     body = {"amount": -200, "reason": "wd", "idempotency_key": "w1"}
     r = client.post("/wallet/txn", json=body, headers=headers)
     assert r.status_code == 400
-    with Session(main.engine) as s:
+    with Session(db.engine) as s:
         count = s.scalar(select(func.count()).select_from(LedgerEntry))
         assert count == 0

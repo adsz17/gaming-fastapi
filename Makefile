@@ -15,4 +15,4 @@ test:
 
 # Run the FastAPI app
 run:
-	uvicorn backend.main:app --reload
+        uvicorn api.main:app --reload

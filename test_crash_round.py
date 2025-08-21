@@ -1,5 +1,8 @@
 import os
+import os
+import sys
 import types
+from pathlib import Path
 
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/db"
 
@@ -7,15 +10,22 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, func
 from sqlalchemy.orm import Session
 
-from backend import main
+ROOT = Path(__file__).resolve().parent
+sys.path.append(str(ROOT / "backend"))
+
+import api.main as main
+from api.models import Base, Round
+import api.db as db
+import api.routers.crash as crash_router
 
 
 def test_round_idempotency(monkeypatch):
     if os.path.exists("test.db"):
         os.remove("test.db")
     engine = create_engine("sqlite:///test.db", connect_args={"check_same_thread": False})
-    main.engine = engine
-    main.Base.metadata.create_all(engine)
+    db.engine = engine
+    db.SessionLocal.configure(bind=engine)
+    Base.metadata.create_all(engine)
 
     # dummy user
     user = types.SimpleNamespace(id="u1", email="u@example.com")
@@ -52,9 +62,9 @@ def test_round_idempotency(monkeypatch):
             return Resp()
         raise AssertionError("unexpected url")
 
-    monkeypatch.setattr(main.httpx, "post", fake_post)
-    main.WALLET_URL = "http://wallet"
-    main.RNG_URL = "http://rng"
+    monkeypatch.setattr(crash_router.httpx, "post", fake_post)
+    crash_router.WALLET_URL = "http://wallet"
+    crash_router.RNG_URL = "http://rng"
 
     client = TestClient(main.app)
     body = {"bet": 10, "client_seed": "cs", "idem": "abc"}
@@ -67,6 +77,6 @@ def test_round_idempotency(monkeypatch):
     assert len(calls) == 2
 
     with Session(engine) as s:
-        count = s.scalar(select(func.count()).select_from(main.Round))
+        count = s.scalar(select(func.count()).select_from(Round))
         assert count == 1
 

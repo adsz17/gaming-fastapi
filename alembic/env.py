@@ -21,11 +21,11 @@ logger = logging.getLogger('alembic.env')
 # add your model's MetaData object here
 # for 'autogenerate' support
 try:
-    from backend.models import Base
+    from api.models import Base
 except ModuleNotFoundError:
     import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from backend.models import Base
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+    from api.models import Base
 
 target_metadata = Base.metadata
 
