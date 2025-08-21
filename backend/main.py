@@ -18,6 +18,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
+from .middleware.ratelimit import RateLimitMiddleware
+
 from fastapi import FastAPI, HTTPException, Depends, Header
 
 from typing import Any, List
@@ -48,6 +51,9 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, Session, relationship
+
 
 
 trace_id_ctx = contextvars.ContextVar("trace_id", default="-")
@@ -115,6 +121,22 @@ JWT_ALG = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_EXPIRES_MIN", "1440"))
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admin-token")
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=5,
+        pool_recycle=1800,
+    )
+
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 engine = create_engine(
     DATABASE_URL,
@@ -141,6 +163,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
 
 # ---------- Observability ----------
 REQUEST_LATENCY = Histogram(
@@ -306,6 +329,12 @@ def create_token(user_id: str, email: str) -> str:
                "exp": int((now + timedelta(minutes=JWT_MINUTES)).timestamp())}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
+def get_session():
+    with Session(engine) as s:
+        yield s
+
+
+def get_current_user(request: Request, session: Session = Depends(get_session)):
 def get_current_user(request: Request, session: Session = Depends(lambda: Session(engine))):
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -393,6 +422,7 @@ def account(user: User = Depends(get_current_user)):
         return {"balance": float(acc.balance)}
 
 @app.post("/crash/round", response_model=RoundOut)
+
 def crash_round(body: CrashRoundIn, user: User = Depends(get_current_user())):
     if body.bet <= 0:
         raise HTTPException(400, "Bet must be > 0")
