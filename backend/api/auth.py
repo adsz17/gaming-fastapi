@@ -67,6 +67,7 @@ def register(data: RegisterIn) -> TokenOut:
         user = User(
             id=str(uuid.uuid4()),
             email=data.email,
+            username=data.username,
             password_hash=pwd_context.hash(data.password),
         )
         s.add(user)
