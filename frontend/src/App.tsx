@@ -4,6 +4,7 @@ import Play from "./pages/Play";
 import Wallet from "./pages/Wallet";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
+import Admin from "./pages/Admin";
 import { ToastProvider } from "./components/ui/toast";
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/wallet" element={<Wallet />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </ToastProvider>
   );
