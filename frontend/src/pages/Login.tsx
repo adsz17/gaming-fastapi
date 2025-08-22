@@ -26,15 +26,17 @@ export default function Login() {
         toast(err.error || "Login failed");
         return;
       }
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       localStorage.setItem("token", data.token);
       // fetch balance for store
       const balRes = await fetch("/wallet/balance", {
         headers: { Authorization: `Bearer ${data.token}` },
       });
       if (balRes.ok) {
-        const bal = await balRes.json();
-        setBalance(bal.balance);
+        const bal = await balRes.json().catch(() => ({}));
+        if (typeof bal.balance === "number") {
+          setBalance(bal.balance);
+        }
       }
       toast("Logged in");
       navigate("/");

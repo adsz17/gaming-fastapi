@@ -26,9 +26,11 @@ export default function Admin() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      const data = await res.json();
-      setToken(data.access_token);
-      localStorage.setItem("admin_token", data.access_token);
+      const data = await res.json().catch(() => ({}));
+      if (data.access_token) {
+        setToken(data.access_token);
+        localStorage.setItem("admin_token", data.access_token);
+      }
     }
   }
 
@@ -43,8 +45,8 @@ export default function Admin() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
-      const data = await res.json();
-      setUsers(data);
+      const data = await res.json().catch(() => []);
+      setUsers(Array.isArray(data) ? data : []);
     }
   }
 
