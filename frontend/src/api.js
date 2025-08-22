@@ -1,4 +1,5 @@
-const API = "https://gaming-fastapi.onrender.com";
+// Use API URL from environment variables; default to same origin
+const API = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export async function http(path, { method = "GET", body, headers } = {}) {
   const res = await fetch(API + path, {
