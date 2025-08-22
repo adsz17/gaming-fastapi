@@ -6,12 +6,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry, Counter
+from api.auth import _create_token
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "backend"))
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/test"
+os.environ["RATE_LIMIT_PER_MIN"] = "1000"
 
 import api.main as main
 from api.models import Base
@@ -65,7 +67,9 @@ def client():
 
 def test_metrics_increment(client: TestClient):
     body = {"bet": 10, "client_seed": "s", "idem": "k"}
-    assert client.post("/crash/round", json=body).status_code == 200
+    token = _create_token("u1")
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.post("/crash/round", json=body, headers=headers).status_code == 200
     metrics = client.get("/metrics").text
     assert "rtp_observed_total" in metrics
     line = [ln for ln in metrics.splitlines() if ln.startswith("rtp_observed_total")][0]

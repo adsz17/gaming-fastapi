@@ -1,8 +1,9 @@
 import os
-import json
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from types import ModuleType
 from typing import Optional
 
@@ -21,24 +22,51 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-raw = os.getenv("CORS_ORIGINS")
+DEFAULT_ORIGINS = [
+    "https://gaming-fastapi-1.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+raw = os.getenv("ALLOWED_ORIGINS")
 if raw:
-    try:
-        ORIGINS = json.loads(raw)
-    except Exception:
-        ORIGINS = [o.strip() for o in raw.split(",") if o.strip()]
-    ORIGINS = [o.rstrip("/") for o in ORIGINS]
+    ORIGINS = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
 else:
-    ORIGINS = ["*"]
+    ORIGINS = DEFAULT_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ORIGINS,
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 app.add_middleware(RateLimitMiddleware)
+
+logger = logging.getLogger("uvicorn")
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    response = await call_next(request)
+    logger.info("%s %s %s", request.method, request.url.path, response.status_code)
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=400, content={"error": "invalid_input", "details": exc.errors()}
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict):
+        content = detail
+    else:
+        content = {"error": detail}
+    return JSONResponse(status_code=exc.status_code, content=content)
 
 
 @app.get("/health")
