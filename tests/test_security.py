@@ -28,8 +28,14 @@ def create_client(exp: str, limit: int | None = None) -> TestClient:
 
 def test_jwt_expiration():
     with create_client("0") as client:
-        res = client.post("/api/auth/register", json={"email": "a@a.com", "username": "a", "password": "secret"})
-        token = res.json()["access_token"]
+        client.post(
+            "/api/auth/register",
+            json={"email": "a@a.com", "username": "abc", "password": "secret"},
+        )
+        res_login = client.post(
+            "/api/auth/login", json={"email": "a@a.com", "password": "secret"}
+        )
+        token = res_login.json()["token"]
         time.sleep(1)
         res_me = client.get("/me", headers={"Authorization": f"Bearer {token}"})
         assert res_me.status_code == 401
@@ -37,7 +43,17 @@ def test_jwt_expiration():
 
 def test_rate_limit_block():
     with create_client("60", limit=2) as client:
-        client.post("/api/auth/register", json={"email": "b@b.com", "username": "b", "password": "pw"})
-        assert client.post("/api/auth/login", json={"email": "b@b.com", "password": "pw"}).status_code == 200
-        res = client.post("/api/auth/login", json={"email": "b@b.com", "password": "pw"})
+        client.post(
+            "/api/auth/register",
+            json={"email": "b@b.com", "username": "bob", "password": "secret"},
+        )
+        assert (
+            client.post(
+                "/api/auth/login", json={"email": "b@b.com", "password": "secret"}
+            ).status_code
+            == 200
+        )
+        res = client.post(
+            "/api/auth/login", json={"email": "b@b.com", "password": "secret"}
+        )
         assert res.status_code == 429

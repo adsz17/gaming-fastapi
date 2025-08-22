@@ -4,9 +4,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, constr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from typing import Literal
 
 from .db import engine
 from .models import User
@@ -21,8 +22,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    username: str
-    password: str
+    username: constr(min_length=3)
+    password: constr(min_length=6)
 
 
 class LoginIn(BaseModel):
@@ -30,9 +31,22 @@ class LoginIn(BaseModel):
     password: str
 
 
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+class RegisterOut(BaseModel):
+    id: str
+    email: EmailStr
+    username: str
+    message: Literal["registered"] = "registered"
+
+
+class UserOut(BaseModel):
+    id: str
+    email: EmailStr
+    username: str
+
+
+class LoginOut(BaseModel):
+    token: str
+    user: UserOut
 
 
 def _create_token(uid: str) -> str:
@@ -59,11 +73,11 @@ def get_current_user(request: Request) -> User:
         return user
 
 
-@router.post("/register", response_model=TokenOut)
-def register(data: RegisterIn) -> TokenOut:
+@router.post("/register", response_model=RegisterOut, status_code=201)
+def register(data: RegisterIn) -> RegisterOut:
     with Session(engine) as s, s.begin():
         if s.scalar(select(User).where(User.email == data.email)):
-            raise HTTPException(status_code=400, detail="Email exists")
+            raise HTTPException(status_code=409, detail={"error": "email_taken"})
         user = User(
             id=str(uuid.uuid4()),
             email=data.email,
@@ -72,16 +86,17 @@ def register(data: RegisterIn) -> TokenOut:
         )
         s.add(user)
         user_id = user.id
-    token = _create_token(user_id)
-    return TokenOut(access_token=token)
+    return RegisterOut(id=user_id, email=data.email, username=data.username)
 
 
-@router.post("/login", response_model=TokenOut)
-def login(data: LoginIn) -> TokenOut:
+@router.post("/login", response_model=LoginOut)
+def login(data: LoginIn) -> LoginOut:
     with Session(engine) as s:
         user = s.scalar(select(User).where(User.email == data.email))
         if not user or not pwd_context.verify(data.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        user_id = user.id
-    token = _create_token(user_id)
-    return TokenOut(access_token=token)
+            raise HTTPException(
+                status_code=401, detail={"error": "invalid_credentials"}
+            )
+        user_out = UserOut(id=user.id, email=user.email, username=user.username)
+    token = _create_token(user.id)
+    return LoginOut(token=token, user=user_out)
