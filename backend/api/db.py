@@ -31,3 +31,12 @@ try:
     Base.metadata.create_all(engine)
 except Exception:
     pass
+
+
+def get_session():
+    """FastAPI dependency that provides a database session."""
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
