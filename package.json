@@ -4,10 +4,10 @@
   "description": "Auxiliary package for Render build; with frontend dependencies.",
   "type": "module",
   "scripts": {
-    "dev": "TAILWIND_CONFIG=frontend/tailwind.config.js vite",
-    "build": "TAILWIND_CONFIG=frontend/tailwind.config.js vite build",
+    "dev": "vite",
+    "build": "vite build",
     "lint": "eslint .",
-    "preview": "TAILWIND_CONFIG=frontend/tailwind.config.js vite preview"
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",
