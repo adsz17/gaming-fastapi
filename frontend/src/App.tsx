@@ -7,6 +7,7 @@ import Leaderboard from "./pages/Leaderboard";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { ToastProvider } from "./components/ui/toast";
 
 export default function App() {
@@ -14,11 +15,11 @@ export default function App() {
     <ToastProvider>
       <Routes>
         <Route path="/" element={<Lobby />} />
-        <Route path="/play" element={<Play />} />
-        <Route path="/wallet" element={<Wallet />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="/admin" element={<Admin />} />
+        <Route path="/play" element={<ProtectedRoute><Play /></ProtectedRoute>} />
+        <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute admin><Admin /></ProtectedRoute>} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
       </Routes>

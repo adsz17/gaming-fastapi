@@ -4,6 +4,8 @@ import Card from "@/components/ui/card";
 import Input from "@/components/ui/input";
 import Button from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import api from "@/lib/api";
+import { useAuthStore } from "@/lib/auth";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -11,24 +13,23 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const toast = useToast();
+  const { setUser } = useAuthStore();
+  const [loading, setLoading] = useState(false);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
+    setLoading(true);
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, username, password }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast(err.error || "Registration failed");
-        return;
-      }
+      const res = await api.post("/api/auth/register", { email, username, password });
+      const data = res.data;
+      localStorage.setItem("token", data.token);
+      setUser(data.user);
       toast("Registered");
-      navigate("/login");
-    } catch {
-      toast("Registration failed");
+      navigate("/play");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Registration failed");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -55,8 +56,8 @@ export default function Register() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <Button type="submit" className="w-full">
-            Register
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Loading..." : "Register"}
           </Button>
         </form>
         <p className="text-sm text-center">

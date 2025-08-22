@@ -5,6 +5,8 @@ import Input from "@/components/ui/input";
 import Button from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useGameStore } from "@/lib/store";
+import api from "@/lib/api";
+import { useAuthStore } from "@/lib/auth";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -12,36 +14,27 @@ export default function Login() {
   const navigate = useNavigate();
   const toast = useToast();
   const { setBalance } = useGameStore();
+  const { setUser } = useAuthStore();
+  const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast(err.error || "Login failed");
-        return;
-      }
-      const data = await res.json().catch(() => ({}));
+      const res = await api.post("/api/auth/login", { email, password });
+      const data = res.data;
       localStorage.setItem("token", data.token);
-      // fetch balance for store
-      const balRes = await fetch("/wallet/balance", {
-        headers: { Authorization: `Bearer ${data.token}` },
-      });
-      if (balRes.ok) {
-        const bal = await balRes.json().catch(() => ({}));
-        if (typeof bal.balance === "number") {
-          setBalance(bal.balance);
-        }
+      setUser(data.user);
+      const balRes = await api.get("/wallet/balance");
+      if (typeof balRes.data?.balance === "number") {
+        setBalance(balRes.data.balance);
       }
       toast("Logged in");
-      navigate("/");
-    } catch {
-      toast("Login failed");
+      navigate("/play");
+    } catch (err: any) {
+      toast(err.response?.data?.error || "Login failed");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -62,8 +55,8 @@ export default function Login() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <Button type="submit" className="w-full">
-            Login
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Loading..." : "Login"}
           </Button>
         </form>
         <p className="text-sm text-center">

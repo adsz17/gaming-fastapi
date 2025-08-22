@@ -3,12 +3,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, constr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from typing import Literal
 
 from .db import engine
 from .models import User, Wallet
@@ -32,20 +32,14 @@ class LoginIn(BaseModel):
     password: str
 
 
-class RegisterOut(BaseModel):
-    id: str
-    email: EmailStr
-    username: str
-    message: Literal["registered"] = "registered"
-
-
 class UserOut(BaseModel):
     id: str
     email: EmailStr
     username: str
+    is_admin: bool
 
 
-class LoginOut(BaseModel):
+class AuthOut(BaseModel):
     token: str
     user: UserOut
 
@@ -57,9 +51,13 @@ def _create_token(uid: str) -> str:
 
 def get_current_user(request: Request) -> User:
     auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
+    token = None
+    if auth.startswith("Bearer "):
+        token = auth.split(" ", 1)[1]
+    else:
+        token = request.cookies.get("token")
+    if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(
             token, settings.JWT_SECRET, algorithms=[JWT_ALG], options={"verify_exp": True}
@@ -74,9 +72,29 @@ def get_current_user(request: Request) -> User:
         return user
 
 
-@router.post("/register", response_model=RegisterOut, status_code=201)
-def register(data: RegisterIn) -> RegisterOut:
-    with Session(engine) as s, s.begin():
+COOKIE_ARGS = dict(
+    key="token",
+    httponly=True,
+    secure=True,
+    samesite="none",
+    domain=".onrender.com",
+    path="/",
+)
+
+
+def _login_response(user: User, status: int = 200) -> JSONResponse:
+    user_out = UserOut(
+        id=user.id, email=user.email, username=user.username, is_admin=user.is_admin
+    )
+    token = _create_token(user.id)
+    resp = JSONResponse(AuthOut(token=token, user=user_out).model_dump(), status_code=status)
+    resp.set_cookie(value=token, **COOKIE_ARGS)
+    return resp
+
+
+@router.post("/register", response_model=AuthOut, status_code=201)
+def register(data: RegisterIn) -> JSONResponse:
+    with Session(engine, expire_on_commit=False) as s, s.begin():
         if s.scalar(select(User).where(User.email == data.email)):
             raise HTTPException(status_code=409, detail={"error": "email_taken"})
         user = User(
@@ -84,21 +102,19 @@ def register(data: RegisterIn) -> RegisterOut:
             email=data.email,
             username=data.username,
             password_hash=pwd_context.hash(data.password),
+            is_admin=False,
         )
         s.add(user)
         s.add(Wallet(user_id=user.id, balance=Decimal("100")))
-        user_id = user.id
-    return RegisterOut(id=user_id, email=data.email, username=data.username)
+        response = _login_response(user, status=201)
+    return response
 
 
-@router.post("/login", response_model=LoginOut)
-def login(data: LoginIn) -> LoginOut:
-    with Session(engine) as s:
+@router.post("/login", response_model=AuthOut)
+def login(data: LoginIn) -> JSONResponse:
+    with Session(engine, expire_on_commit=False) as s:
         user = s.scalar(select(User).where(User.email == data.email))
         if not user or not pwd_context.verify(data.password, user.password_hash):
-            raise HTTPException(
-                status_code=401, detail={"error": "invalid_credentials"}
-            )
-        user_out = UserOut(id=user.id, email=user.email, username=user.username)
-    token = _create_token(user.id)
-    return LoginOut(token=token, user=user_out)
+            raise HTTPException(status_code=401, detail={"error": "invalid_credentials"})
+        response = _login_response(user)
+    return response
