@@ -18,8 +18,9 @@ wallet: Optional[ModuleType] = None
 crash: Optional[ModuleType] = None
 me: Optional[ModuleType] = None
 metrics: Optional[ModuleType] = None
+leaderboard: Optional[ModuleType] = None
 try:
-    from .routers import wallet as wallet, crash as crash, me as me, metrics as metrics  # type: ignore
+    from .routers import wallet as wallet, crash as crash, me as me, metrics as metrics, leaderboard as leaderboard  # type: ignore
 except Exception:
     pass
 
@@ -99,6 +100,8 @@ if me:
     app.include_router(me.router, tags=["default"])
 if metrics:
     app.include_router(metrics.router, tags=["default"])
+if leaderboard:
+    app.include_router(leaderboard.router, tags=["leaderboard"])
 
 # Auth router
 app.include_router(auth_router)
