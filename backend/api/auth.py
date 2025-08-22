@@ -86,7 +86,7 @@ def register(data: RegisterIn) -> RegisterOut:
             password_hash=pwd_context.hash(data.password),
         )
         s.add(user)
-        s.add(Wallet(user_id=user.id, balance=Decimal("0")))
+        s.add(Wallet(user_id=user.id, balance=Decimal("100")))
         user_id = user.id
     return RegisterOut(id=user_id, email=data.email, username=data.username)
 

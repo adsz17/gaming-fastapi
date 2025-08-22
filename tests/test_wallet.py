@@ -82,3 +82,18 @@ def test_insufficient_funds():
     with Session(db.engine) as s:
         count = s.scalar(select(func.count()).select_from(LedgerEntry))
         assert count == 0
+
+
+def test_balance_endpoint():
+    token = _register_user("c@example.com")
+    headers = _auth_header(token)
+    r = client.get("/wallet/balance", headers=headers)
+    assert r.status_code == 200
+    client.post(
+        "/wallet/txn",
+        json={"amount": 25, "reason": "dep", "idempotency_key": "b1"},
+        headers=headers,
+    )
+    r2 = client.get("/wallet/balance", headers=headers)
+    assert r2.status_code == 200
+    assert r2.json()["balance"] == 125.0
