@@ -1,5 +1,10 @@
-// Use API URL from environment variables; default to same origin
-const API = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+// Use API URL from environment variables; when developing without a custom
+// URL fall back to the local backend. This avoids network errors when the
+// frontend runs on Vite (port 5173) and the API listens on port 8000.
+const API = (
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "http://localhost:8000" : "")
+).replace(/\/$/, "");
 
 export async function http(path, { method = "GET", body, headers } = {}) {
   const res = await fetch(API + path, {
