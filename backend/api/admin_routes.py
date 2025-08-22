@@ -24,6 +24,23 @@ def admin_login(body: LoginBody, db: Session = Depends(get_session)):
     return {"access_token": create_token(user), "token_type": "bearer"}
 
 
+class UserOut(BaseModel):
+    id: str
+    email: str
+    username: str
+    balance: Decimal
+
+
+@router.get("/users", response_model=list[UserOut])
+def list_users(db: Session = Depends(get_session), _: User = Depends(get_current_admin)):
+    q = db.query(User, Wallet).outerjoin(Wallet).order_by(User.created_at.desc())
+    users: list[UserOut] = []
+    for u, w in q.all():
+        bal = w.balance if w and w.balance is not None else Decimal("0")
+        users.append(UserOut(id=u.id, email=u.email, username=u.username, balance=bal))
+    return users
+
+
 class TxOut(BaseModel):
     id: int
     user_id: str
