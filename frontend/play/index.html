@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gaming FastAPI - Play</title>
+  <script>
+    tailwind = {
+      theme: {
+        extend: {
+          colors: {
+            'neon-pink': '#ff007a',
+            'neon-blue': '#00eaff'
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen flex flex-col font-sans">
+  <!-- Navbar -->
+  <nav class="fixed top-0 left-0 right-0 backdrop-blur bg-gray-900/80 border-b border-gray-700 z-10">
+    <div class="max-w-4xl mx-auto flex items-center justify-between p-4">
+      <a href="#" class="font-bold text-lg">Gaming FastAPI</a>
+      <button id="btnAuth" class="px-3 py-1 rounded bg-neon-blue text-gray-900 text-sm font-medium transition-colors">Ingresar</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 pt-20 pb-8">
+    <div class="max-w-4xl mx-auto grid gap-4 p-4 md:grid-cols-3">
+      <!-- Game Panel -->
+      <section id="panelJuego" class="bg-gray-800/50 backdrop-blur rounded-xl p-4 shadow md:col-span-2 flex flex-col gap-4">
+        <header class="flex items-center justify-between">
+          <span class="text-sm">Último:</span>
+          <span id="lastMultiplier" class="px-2 py-1 text-sm font-semibold rounded bg-neon-pink text-gray-900 animate-pulse">--</span>
+        </header>
+        <div id="liveMultiplier" class="flex-1 flex items-center justify-center text-6xl font-mono animate-pulse">--</div>
+        <div class="flex items-center justify-between">
+          <button id="startBtn" class="px-4 py-2 rounded bg-neon-blue text-gray-900 font-semibold disabled:opacity-50 transition-all">Iniciar ronda</button>
+          <span id="roundState" class="text-sm">-</span>
+        </div>
+      </section>
+
+      <!-- Bet Panel -->
+      <section id="panelApuesta" class="bg-gray-800/50 backdrop-blur rounded-xl p-4 shadow space-y-4">
+        <div>
+          <label for="betAmount" class="block text-sm mb-1">Monto</label>
+          <input id="betAmount" type="number" min="0" step="0.01" class="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:outline-none focus:ring focus:ring-neon-blue" />
+        </div>
+        <div>
+          <label for="cashout" class="block text-sm mb-1">Auto cashout</label>
+          <select id="cashout" class="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:outline-none focus:ring focus:ring-neon-blue">
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+            <option value="5">5x</option>
+          </select>
+        </div>
+        <button id="betBtn" class="w-full px-4 py-2 rounded bg-neon-pink text-gray-900 font-semibold disabled:opacity-50 transition-colors">Apostar</button>
+        <p class="text-sm">Saldo: <span id="balance">-</span></p>
+      </section>
+
+      <!-- History Panel -->
+      <section id="panelHistorial" class="bg-gray-800/50 backdrop-blur rounded-xl p-4 shadow md:col-span-3 space-y-4">
+        <div id="multipliers" class="flex flex-wrap gap-2"></div>
+        <div class="overflow-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-gray-400">
+              <tr>
+                <th class="px-2 py-1">Jugador</th>
+                <th class="px-2 py-1">Monto</th>
+                <th class="px-2 py-1">Cashout</th>
+                <th class="px-2 py-1">Resultado</th>
+              </tr>
+            </thead>
+            <tbody id="betsTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="text-center text-sm text-gray-500 py-4">
+    <a href="#" class="hover:underline">Inicio</a>
+    <span class="mx-2">·</span>
+    <a href="#" class="hover:underline">Términos</a>
+  </footer>
+
+  <!-- Toast container -->
+  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 space-y-2 z-50" aria-live="assertive"></div>
+
+  <!-- Login Modal -->
+  <div id="loginModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center hidden">
+    <div class="bg-gray-800 p-6 rounded-lg w-80 space-y-4">
+      <h2 class="text-xl font-bold">Ingresar</h2>
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label for="email" class="block text-sm mb-1">Email</label>
+          <input id="email" type="email" class="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:outline-none focus:ring focus:ring-neon-blue" required />
+        </div>
+        <div>
+          <label for="password" class="block text-sm mb-1">Password</label>
+          <input id="password" type="password" class="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:outline-none focus:ring focus:ring-neon-blue" required />
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="closeModal" class="px-3 py-1 rounded bg-gray-700">Cancelar</button>
+          <button type="submit" class="px-3 py-1 rounded bg-neon-blue text-gray-900 font-semibold">Ingresar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
