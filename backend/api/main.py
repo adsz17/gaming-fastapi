@@ -2,13 +2,16 @@ import os
 import logging
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from types import ModuleType
+from pathlib import Path
 from typing import Optional
 
 from .middleware.ratelimit import RateLimitMiddleware
 from .auth import router as auth_router
+from .admin_routes import router as admin_router
 
 # Routers (importá solo los que existan en tu proyecto)
 wallet: Optional[ModuleType] = None
@@ -24,6 +27,7 @@ app = FastAPI(title="FastAPI", version="0.1.0")
 
 DEFAULT_ORIGINS = [
     "https://gaming-fastapi-1.onrender.com",
+    "https://gaming-fastapi.onrender.com",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
@@ -41,6 +45,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RateLimitMiddleware)
+
+app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
+
 
 logger = logging.getLogger("uvicorn")
 
@@ -95,6 +102,7 @@ if metrics:
 
 # Auth router
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 # Local run
 if __name__ == "__main__":

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Admin · Gaming</title>
+<style>
+  body{margin:0;background:#0b0f19;color:#e6eaf2;font-family:system-ui,Segoe UI,Roboto}
+  .wrap{max-width:980px;margin:40px auto;padding:0 16px}
+  .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;overflow:hidden}
+  .hd,.ft{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.12)}
+  .ft{border-top:1px solid rgba(255,255,255,.12);border-bottom:none}
+  .bd{padding:16px}
+  input,select,button{border-radius:10px;padding:.6rem .8rem;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:#e6eaf2}
+  button{cursor:pointer;font-weight:700}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:.6rem;border-bottom:1px solid rgba(255,255,255,.12);text-align:left}
+  th{color:#9aa3b2}
+  .ok{background:#22c55e;color:#04110a;border-color:transparent}
+  .warn{background:#f59e0b;color:#1b1304;border-color:transparent}
+</style>
+<div class="wrap">
+  <div class="card">
+    <div class="hd row">
+      <strong>Panel Admin</strong>
+      <span id="status" style="margin-left:auto;opacity:.8">Desconectado</span>
+    </div>
+    <div class="bd">
+      <div class="row" id="loginRow">
+        <input id="email" placeholder="admin email" type="email"/>
+        <input id="password" placeholder="password" type="password"/>
+        <button id="btnLogin" class="ok">Login</button>
+      </div>
+
+      <div id="app" style="display:none">
+        <div class="row" style="margin:14px 0">
+          <button id="btnReload">Refrescar pendientes</button>
+          <div style="margin-left:auto" class="row">
+            <input id="creditUser" placeholder="email o user_id"/>
+            <input id="creditAmount" placeholder="monto" type="number" step="0.01" min="0"/>
+            <button id="btnCredit" class="ok">Acreditar</button>
+          </div>
+        </div>
+
+        <table id="tbl">
+          <thead><tr><th>ID</th><th>User</th><th>Tipo</th><th>Monto</th><th>Nota</th><th>Fecha</th><th>Acción</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="ft">Uso interno · Movimientos y saldos</div>
+  </div>
+</div>
+
+<script>
+  const API = location.origin + "/api/admin";
+  let token = localStorage.getItem("adm_token") || "";
+
+  const el = (id)=>document.getElementById(id);
+  const setStatus = (t)=> el("status").textContent = t;
+
+  function showApp(auth){
+    el("loginRow").style.display = auth ? "none" : "flex";
+    el("app").style.display = auth ? "block" : "none";
+    setStatus(auth ? "Autenticado" : "Desconectado");
+  }
+  showApp(!!token);
+
+  el("btnLogin")?.addEventListener("click", async ()=>{
+    const email = el("email").value.trim();
+    const password = el("password").value;
+    const r = await fetch(API+"/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+    if(!r.ok){ alert("Login inválido"); return; }
+    const data = await r.json();
+    token = data.access_token; localStorage.setItem("adm_token", token);
+    showApp(true); loadPending();
+  });
+
+  async function loadPending(){
+    const r = await fetch(API+"/transactions/pending",{headers:{Authorization:"Bearer "+token}});
+    if(!r.ok){ if(r.status===401||r.status===403){ localStorage.removeItem("adm_token"); token=""; showApp(false); } return; }
+    const rows = await r.json();
+    const tbody = el("tbl").querySelector("tbody");
+    tbody.innerHTML = "";
+    rows.forEach(x=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${x.id}</td>
+        <td>${x.user_id}</td>
+        <td>${x.ttype}</td>
+        <td>${x.amount}</td>
+        <td>${x.note ?? ""}</td>
+        <td>${new Date(x.created_at).toLocaleString()}</td>
+        <td class="row">
+          <button class="ok" data-id="${x.id}" data-apr="1">Aprobar</button>
+          <button class="warn" data-id="${x.id}" data-apr="0">Rechazar</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  el("btnReload")?.addEventListener("click", loadPending);
+
+  el("tbl").addEventListener("click", async (e)=>{
+    const btn = e.target.closest("button"); if(!btn) return;
+    const id = btn.dataset.id; const approve = btn.dataset.apr === "1";
+    const note = approve ? "ok" : prompt("Motivo de rechazo (opcional)") || null;
+    const r = await fetch(API+`/transactions/${id}/decide`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json", Authorization:"Bearer "+token},
+      body: JSON.stringify({approve, note})
+    });
+    if(!r.ok){ alert("Error al decidir"); return; }
+    loadPending();
+  });
+
+  el("btnCredit")?.addEventListener("click", async ()=>{
+    const email_or_user_id = el("creditUser").value.trim();
+    const amount = parseFloat(el("creditAmount").value);
+    if(!email_or_user_id || !(amount>0)) return alert("Completa usuario y monto");
+    const r = await fetch(API+"/credit",{
+      method:"POST",
+      headers:{"Content-Type":"application/json", Authorization:"Bearer "+token},
+      body: JSON.stringify({email_or_user_id, amount, note:"Ajuste manual"})
+    });
+    if(!r.ok){ alert("No se pudo acreditar"); return; }
+    el("creditAmount").value=""; alert("Acreditado ✔");
+  });
+
+  if(token) loadPending();
+</script>

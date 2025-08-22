@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 from typing import Literal
 
 from .db import engine
-from .models import User
+from .models import User, Wallet
 from .settings import settings
 
 JWT_ALG = "HS256"
@@ -85,6 +86,7 @@ def register(data: RegisterIn) -> RegisterOut:
             password_hash=pwd_context.hash(data.password),
         )
         s.add(user)
+        s.add(Wallet(user_id=user.id, balance=Decimal("0")))
         user_id = user.id
     return RegisterOut(id=user_id, email=data.email, username=data.username)
 

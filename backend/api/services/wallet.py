@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Account, LedgerEntry
+from ..models import Wallet, LedgerEntry
 
 
 def apply_transaction(
@@ -22,10 +22,10 @@ def apply_transaction(
         return existing
 
     acc = session.execute(
-        select(Account).where(Account.user_id == user_id).with_for_update()
+        select(Wallet).where(Wallet.user_id == user_id).with_for_update()
     ).scalar_one_or_none()
     if not acc:
-        acc = Account(user_id=user_id, balance=Decimal("100"))
+        acc = Wallet(user_id=user_id, balance=Decimal("100"))
         session.add(acc)
         session.flush()
 
