@@ -12,8 +12,8 @@ export default function Leaderboard() {
 
   useEffect(() => {
     fetch("/leaderboard")
-      .then((res) => res.json())
-      .then(setEntries)
+      .then((res) => (res.ok ? res.json().catch(() => []) : []))
+      .then((data) => setEntries(data))
       .catch(() => {});
   }, []);
 

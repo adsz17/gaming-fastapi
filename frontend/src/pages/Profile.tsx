@@ -16,12 +16,16 @@ export default function Profile() {
   useEffect(() => {
     const token = localStorage.getItem("token") || "";
     fetch("/me", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => (res.ok ? res.json().catch(() => null) : null))
       .then((data) => data && setUser(data))
       .catch(() => {});
     fetch("/wallet/balance", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
-      .then((data) => setBalance(data.balance))
+      .then((res) => (res.ok ? res.json().catch(() => ({})) : {}))
+      .then((data) => {
+        if (typeof data.balance === "number") {
+          setBalance(data.balance);
+        }
+      })
       .catch(() => {});
   }, [setBalance]);
 

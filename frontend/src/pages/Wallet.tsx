@@ -13,8 +13,12 @@ export default function Wallet() {
   useEffect(() => {
     const token = localStorage.getItem("token") || "";
     fetch("/wallet/balance", { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.json())
-      .then((data) => setBalance(data.balance))
+      .then((res) => (res.ok ? res.json().catch(() => ({})) : {}))
+      .then((data) => {
+        if (typeof data.balance === "number") {
+          setBalance(data.balance);
+        }
+      })
       .catch(() => {});
   }, [setBalance]);
 
@@ -33,8 +37,10 @@ export default function Wallet() {
       }),
     });
     if (res.ok) {
-      const data = await res.json();
-      setBalance(data.balance);
+      const data = await res.json().catch(() => ({}));
+      if (typeof data.balance === "number") {
+        setBalance(data.balance);
+      }
     }
   }
 
