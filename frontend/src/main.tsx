@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import Register from "./pages/Register";
+import RegisterPage from "./pages/RegisterPage";
 import "./index.css";
 
 function Index() {
@@ -30,4 +30,4 @@ function Index() {
 // ruteo súper simple por path
 const path = location.pathname;
 const root = createRoot(document.getElementById("app")!);
-root.render(path.startsWith("/register") ? <Register/> : <Index/>);
+root.render(path.startsWith("/register") ? <RegisterPage /> : <Index />);
