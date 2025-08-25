@@ -3,10 +3,12 @@ import { useState } from "react";
 import Button from "./ui/button";
 import Input from "./ui/input";
 import Card from "./ui/card";
+import { useToast } from "@/components/ui/toast";
 
 export default function BetPanel() {
   const { phase, multiplier, minBet, bet, cashout } = useCrashData();
   const [amount, setAmount] = useState<number>(minBet);
+  const toast = useToast();
 
   const betDisabled = phase !== "BETTING" || !amount || amount < minBet;
   const cashDisabled = phase !== "RUNNING";
@@ -20,6 +22,7 @@ export default function BetPanel() {
       <Input
         type="number"
         min={minBet}
+        step="1"
         value={amount}
         onChange={(e) => setAmount(Number(e.target.value))}
         className="w-full"
@@ -30,8 +33,9 @@ export default function BetPanel() {
         onClick={async () => {
           try {
             await bet(amount);
-          } catch (e) {
-            console.error(e);
+            toast("Bet placed");
+          } catch (e: any) {
+            toast(e.message || "Bet failed");
           }
         }}
       >
@@ -41,7 +45,11 @@ export default function BetPanel() {
       <Button
         disabled={cashDisabled}
         className="w-full bg-neon-pink"
-        onClick={() => cashout().catch(console.error)}
+        onClick={() =>
+          cashout()
+            .then(() => toast("Cashed out"))
+            .catch((e: any) => toast(e.message || "Cashout failed"))
+        }
       >
         Cashout
       </Button>

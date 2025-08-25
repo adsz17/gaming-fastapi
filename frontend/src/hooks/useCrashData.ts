@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { API_URL, WS_URL } from "@/lib/env";
+import { postJSON } from "@/lib/http";
 
 type Phase = "BETTING" | "RUNNING" | "CRASHED";
 export function useCrashData() {
@@ -34,12 +35,11 @@ export function useCrashData() {
         if (msg.t === "state") {
           if (msg.phase) setPhase(msg.phase);
           if (msg.m) setMultiplier(msg.m);
-        } else if (msg.t === "tick") {
-          setPhase("RUNNING");
-          setMultiplier(msg.m);
         } else if (msg.t === "start") {
           setPhase("RUNNING");
           setMultiplier(1);
+        } else if (msg.t === "tick") {
+          setMultiplier(msg.m);
         } else if (msg.t === "crash") {
           setPhase("CRASHED");
         } else if (msg.t === "betting") {
@@ -54,17 +54,11 @@ export function useCrashData() {
   }, []);
 
   async function bet(amount: number, auto?: number | null) {
-    const r = await fetch(`${API_URL}/crash/bet?amount=${amount}${auto ? `&auto_cashout=${auto}` : ""}`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!r.ok) throw new Error((await r.json()).detail ?? "bet failed");
+    return postJSON("/crash/bet", { amount, auto_cashout: auto ?? null });
   }
 
   async function cashout() {
-    const r = await fetch(`${API_URL}/crash/cashout`, { method: "POST", credentials: "include" });
-    if (!r.ok) throw new Error((await r.json()).detail ?? "cashout failed");
-    return r.json();
+    return postJSON("/crash/cashout", {});
   }
 
   return { phase, multiplier, minBet, error, bet, cashout };

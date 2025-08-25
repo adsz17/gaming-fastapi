@@ -76,11 +76,6 @@ app.add_middleware(SecureHeadersMiddleware)
 
 app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
 
-@app.on_event("startup")
-async def _startup():
-    # nada que hacer, el engine arranca cuando alguien apuesta
-    ...
-
 
 
 @app.middleware("http")

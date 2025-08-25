@@ -65,3 +65,20 @@ connections. Alembic respects the same variable.
 6. Set the environment variables shown above for each service.
 
 The backend exposes `GET /health` returning `{ "ok": true }`.
+
+## Manual crash test
+
+Para verificar rápidamente el juego de crash:
+
+```bash
+curl -i -X POST $API/crash/bet \
+  -H 'Content-Type: application/json' \
+  -d '{"amount":0}'
+# → 422
+```
+
+En la UI:
+
+1. En fase BETTING el multiplicador queda en 1.00x y el botón Bet sólo habilita si `amount >= minBet`.
+2. Al apostar (>= minBet) la fase pasa a RUNNING y el contador sube.
+3. Tras el crash se muestra CRASHED; luego vuelve a BETTING y el contador vuelve a 1.00x.
