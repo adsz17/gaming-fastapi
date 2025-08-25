@@ -1,8 +1,8 @@
 import logging
 import os
-import asyncio
 import subprocess
 import uuid
+import json
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -19,9 +19,21 @@ from .middleware.ratelimit import RateLimitMiddleware
 from .middleware.security_headers import SecureHeadersMiddleware
 from .auth import router as auth_router
 from .admin_routes import router as admin_router
-from app.core.env import ALLOWED_ORIGINS
-from app.crash.router import router as crash_router
-from app.crash.engine import engine as crash_engine
+from api.crash.engine import CrashEngine
+from api.crash.router import router as crash_router
+
+
+def _parse_origins(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    raw = raw.strip()
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return [str(x) for x in data]
+    except Exception:
+        pass
+    return [o.strip() for o in raw.split(",") if o.strip()]
 
 # Routers (importá solo los que existan en tu proyecto)
 wallet: Optional[ModuleType] = None
@@ -40,7 +52,10 @@ try:
 except Exception:
     pass
 
+ALLOWED_ORIGINS = _parse_origins(os.getenv("ALLOWED_ORIGINS"))
+
 app = FastAPI(title="FastAPI", version="0.1.0")
+app.state.crash_engine = CrashEngine()
 
 logger = logging.getLogger("uvicorn")
 logger.info("CORS: %d allowed origins", len(ALLOWED_ORIGINS))
@@ -51,7 +66,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -60,9 +75,11 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecureHeadersMiddleware)
 
 app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
+
 @app.on_event("startup")
-async def start_crash_engine():
-    asyncio.create_task(crash_engine.run())
+async def _startup():
+    # nada que hacer, el engine arranca cuando alguien apuesta
+    ...
 
 
 
