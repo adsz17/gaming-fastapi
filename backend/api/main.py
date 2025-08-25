@@ -1,5 +1,7 @@
 import os
 import logging
+import subprocess
+import uuid
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +10,9 @@ from fastapi.exceptions import RequestValidationError
 from types import ModuleType
 from pathlib import Path
 from typing import Optional
+from sqlalchemy import text
+
+from .db import SessionLocal
 
 from .middleware.ratelimit import RateLimitMiddleware
 from .auth import router as auth_router
@@ -55,8 +60,16 @@ logger = logging.getLogger("uvicorn")
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     response = await call_next(request)
-    logger.info("%s %s %s", request.method, request.url.path, response.status_code)
+    logger.info(
+        "%s %s %s %s",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+    )
+    response.headers["X-Request-ID"] = request_id
     return response
 
 
@@ -80,6 +93,25 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/healthz")
+def healthz():
+    """Check DB connectivity and return commit version."""
+    try:
+        with SessionLocal() as s:
+            s.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - health check
+        raise HTTPException(status_code=500, detail="db_error") from exc
+    commit = os.getenv("COMMIT_SHA")
+    if not commit:
+        try:
+            commit = (
+                subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+            )
+        except Exception:  # pragma: no cover - git not available
+            commit = "unknown"
+    return {"ok": True, "commit": commit}
 
 
 @app.get("/version")

@@ -49,6 +49,11 @@ def _create_token(uid: str) -> str:
     return jwt.encode({"sub": uid, "exp": exp}, settings.JWT_SECRET, algorithm=JWT_ALG)
 
 
+def _create_refresh_token(uid: str) -> str:
+    exp = datetime.now(timezone.utc) + timedelta(days=7) - timedelta(seconds=1)
+    return jwt.encode({"sub": uid, "exp": exp, "type": "refresh"}, settings.JWT_SECRET, algorithm=JWT_ALG)
+
+
 def get_current_user(request: Request) -> User:
     auth = request.headers.get("Authorization", "")
     token = None
@@ -81,14 +86,18 @@ COOKIE_ARGS = dict(
     path="/",
 )
 
+REFRESH_COOKIE_ARGS = {**COOKIE_ARGS, "key": "refresh_token"}
+
 
 def _login_response(user: User, status: int = 200) -> JSONResponse:
     user_out = UserOut(
         id=user.id, email=user.email, username=user.username, is_admin=user.is_admin
     )
     token = _create_token(user.id)
+    refresh = _create_refresh_token(user.id)
     resp = JSONResponse(AuthOut(token=token, user=user_out).model_dump(), status_code=status)
     resp.set_cookie(value=token, **COOKIE_ARGS)
+    resp.set_cookie(value=refresh, **REFRESH_COOKIE_ARGS)
     return resp
 
 
@@ -116,5 +125,27 @@ def login(data: LoginIn) -> JSONResponse:
         user = s.scalar(select(User).where(User.email == data.email))
         if not user or not pwd_context.verify(data.password, user.password_hash):
             raise HTTPException(status_code=401, detail={"error": "invalid_credentials"})
+        response = _login_response(user)
+    return response
+
+
+@router.post("/refresh", response_model=AuthOut)
+def refresh(request: Request) -> JSONResponse:
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SECRET, algorithms=[JWT_ALG], options={"verify_exp": True}
+        )
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
+    uid = payload.get("sub")
+    with Session(engine) as s:
+        user = s.get(User, uid)
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
         response = _login_response(user)
     return response

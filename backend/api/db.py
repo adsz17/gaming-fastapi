@@ -2,6 +2,11 @@ import os
 from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import StaticPool
 
 from .models import Base
@@ -27,6 +32,20 @@ if os.getenv("SERVERLESS_DB") == "true":
 engine = create_engine(DATABASE_URL, **_engine_args)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
 
+# Async engine/session setup
+ASYNC_DATABASE_URL = DATABASE_URL
+if ASYNC_DATABASE_URL.startswith("sqlite"):
+    if "+aiosqlite" not in ASYNC_DATABASE_URL:
+        ASYNC_DATABASE_URL = "sqlite+aiosqlite://" + ASYNC_DATABASE_URL.split("://", 1)[1]
+elif ASYNC_DATABASE_URL.startswith("postgresql+psycopg://"):
+    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace(
+        "postgresql+psycopg://", "postgresql+asyncpg://", 1
+    )
+async_engine = create_async_engine(ASYNC_DATABASE_URL, **_engine_args)
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine, expire_on_commit=False, class_=AsyncSession
+)
+
 try:
     Base.metadata.create_all(engine)
 except Exception:
@@ -40,3 +59,9 @@ def get_session():
         yield session
     finally:
         session.close()
+
+
+async def get_async_session():
+    """Async session dependency"""
+    async with AsyncSessionLocal() as session:
+        yield session
