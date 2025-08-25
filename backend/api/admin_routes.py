@@ -1,12 +1,16 @@
+"""Admin routes protected by cookie based authentication."""
+
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from decimal import Decimal
 from passlib.hash import bcrypt
 
 from .db import get_session
 from .models import User, Wallet, Transaction
-from .security import get_current_admin, create_token
+from .security import create_token, get_current_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -18,10 +22,23 @@ class LoginBody(BaseModel):
 
 @router.post("/login")
 def admin_login(body: LoginBody, db: Session = Depends(get_session)):
+    """Authenticate an administrator and set an access token cookie."""
+
     user = db.query(User).filter(User.email == body.email.lower()).first()
     if not user or not bcrypt.verify(body.password, user.password_hash) or not user.is_admin:
         raise HTTPException(401, "Credenciales inválidas")
-    return {"access_token": create_token(user), "token_type": "bearer"}
+
+    token = create_token(user)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(
+        "access_token",
+        token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+    return resp
 
 
 class UserOut(BaseModel):
@@ -74,7 +91,12 @@ class DecisionBody(BaseModel):
 
 
 @router.post("/transactions/{tx_id}/decide")
-def decide(tx_id: int, body: DecisionBody, db: Session = Depends(get_session), admin: User = Depends(get_current_admin)):
+def decide(
+    tx_id: int,
+    body: DecisionBody,
+    db: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin),
+):
     tx = db.get(Transaction, tx_id)
     if not tx or tx.status != "pending":
         raise HTTPException(404, "Transacción no encontrada o ya resuelta")
@@ -109,7 +131,11 @@ class CreditBody(BaseModel):
 
 
 @router.post("/credit")
-def credit(body: CreditBody, db: Session = Depends(get_session), admin: User = Depends(get_current_admin)):
+def credit(
+    body: CreditBody,
+    db: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin),
+):
     user = None
     if "@" in body.email_or_user_id:
         user = db.query(User).filter(User.email == body.email_or_user_id.lower()).first()

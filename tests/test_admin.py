@@ -58,7 +58,8 @@ def test_list_users():
     admin = _create_user("admin@example.com", is_admin=True)
     _create_user("alice@example.com", balance=Decimal("5"))
     token = security.create_token(admin)
-    resp = client.get("/api/admin/users", headers={"Authorization": f"Bearer {token}"})
+    client.cookies.set("access_token", token)
+    resp = client.get("/api/admin/users")
     assert resp.status_code == 200
     users = resp.json()
     assert any(u["email"] == "alice@example.com" and float(u["balance"]) == 5 for u in users)
