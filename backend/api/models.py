@@ -5,7 +5,20 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
-from sqlalchemy import Numeric, String, Text, JSON, BigInteger, ForeignKey, Integer, Boolean, Enum, DateTime, func
+from sqlalchemy import (
+    Numeric,
+    String,
+    Text,
+    JSON,
+    BigInteger,
+    ForeignKey,
+    Integer,
+    Boolean,
+    Enum,
+    DateTime,
+    func,
+    text,
+)
 
 
 class Base(DeclarativeBase):
@@ -19,17 +32,24 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50))
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
 
     wallet: Mapped["Wallet"] = relationship(back_populates="user", uselist=False)
 
 
 class Wallet(Base):
     __tablename__ = "wallets"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
-    balance: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("0"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"), primary_key=True, index=True
+    )
+    balance: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     user: Mapped[User] = relationship(back_populates="wallet")
 
@@ -38,12 +58,17 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    ttype: Mapped[str] = mapped_column(Enum("deposit","withdraw","bet","win","adjustment", name="transaction_type"))
+    ttype: Mapped[str] = mapped_column(
+        Enum("deposit", "withdraw", "bet", "win", "adjustment", name="transaction_type")
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 6))
-    status: Mapped[str] = mapped_column(Enum("pending","approved","rejected", name="transaction_status"), index=True, default="pending")
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    approved_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    round_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), ForeignKey("rounds.id"), nullable=True
+    )
+    op_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Round(Base):

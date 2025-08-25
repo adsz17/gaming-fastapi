@@ -1,6 +1,6 @@
 import os
 from typing import Any
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -45,6 +45,15 @@ async_engine = create_async_engine(ASYNC_DATABASE_URL, **_engine_args)
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine, expire_on_commit=False, class_=AsyncSession
 )
+
+SCHEMA = os.getenv("DB_SCHEMA")
+if SCHEMA:
+    def _set_search_path(dbapi_conn, _):
+        with dbapi_conn.cursor() as cursor:
+            cursor.execute(f"SET search_path TO {SCHEMA}, public")
+
+    event.listen(engine, "connect", _set_search_path, once=True)
+    event.listen(async_engine.sync_engine, "connect", _set_search_path, once=True)
 
 try:
     Base.metadata.create_all(engine)
