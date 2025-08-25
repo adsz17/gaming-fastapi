@@ -18,9 +18,17 @@ export default function ActiveBetsPanel() {
 
   React.useEffect(() => {
     fetch(`${API_URL}/bets/active`, { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => setBets(data))
-      .catch(() => toast("Error cargando apuestas"))
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("failed");
+        }
+        return res.json();
+      })
+      .then((data) => setBets(Array.isArray(data) ? data : []))
+      .catch(() => {
+        toast("Error cargando apuestas");
+        setBets([]);
+      })
       .finally(() => setLoading(false));
   }, [toast]);
 

@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from passlib.hash import bcrypt
 
-from api.models import Base, User, Wallet
+from api.models import User, Wallet
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL, future=True)
@@ -14,8 +14,14 @@ def ensure_admin(email: str, password: str, username: str = "admin"):
     with Session() as db:
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
-            user = User(email=email.lower(), username=username, password_hash=bcrypt.hash(password), is_admin=True)
-            db.add(user); db.flush()
+            user = User(
+                email=email.lower(),
+                username=username,
+                password_hash=bcrypt.hash(password),
+                is_admin=True,
+            )
+            db.add(user)
+            db.flush()
             db.add(Wallet(user_id=user.id, balance=0))
         else:
             user.is_admin = True

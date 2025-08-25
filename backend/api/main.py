@@ -26,8 +26,16 @@ crash: Optional[ModuleType] = None
 me: Optional[ModuleType] = None
 metrics: Optional[ModuleType] = None
 leaderboard: Optional[ModuleType] = None
+bets: Optional[ModuleType] = None
 try:
-    from .routers import wallet as wallet, crash as crash, me as me, metrics as metrics, leaderboard as leaderboard  # type: ignore
+    from .routers import (
+        wallet as wallet,
+        crash as crash,
+        me as me,
+        metrics as metrics,
+        leaderboard as leaderboard,
+        bets as bets,
+    )  # type: ignore
 except Exception:
     pass
 
@@ -135,6 +143,8 @@ if metrics:
     app.include_router(metrics.router, tags=["default"])
 if leaderboard:
     app.include_router(leaderboard.router, tags=["leaderboard"])
+if bets:
+    app.include_router(bets.router, tags=["bets"])
 
 # Auth router
 app.include_router(auth_router)

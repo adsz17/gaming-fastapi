@@ -15,11 +15,11 @@ sys.path.append(str(ROOT / "backend"))
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/test"
 os.environ["RATE_LIMIT_PER_MIN"] = "1000"
 
-import api.main as main
-from api.models import Base
-import api.db as db
-import api.routers.crash as crash_router
-import api.routers.metrics as metrics_router
+import api.main as main  # noqa: E402
+from api.models import Base  # noqa: E402
+import api.db as db  # noqa: E402
+import api.routers.crash as crash_router  # noqa: E402
+import api.routers.metrics as metrics_router  # noqa: E402
 
 
 @pytest.fixture(scope="module")
