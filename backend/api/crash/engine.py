@@ -60,6 +60,7 @@ class CrashEngine:
                 self.phase = "RUNNING"
                 self.multiplier = 1.0
                 if self._runner_task is None or self._runner_task.done():
+                    # El loop se dispara únicamente acá
                     self._runner_task = asyncio.create_task(self._run_loop())
 
     async def cashout(self, player_id: str):
@@ -122,4 +123,5 @@ class CrashEngine:
             self.crash_at = None
             self.started = False
             self.bets.clear()
+            self._runner_task = None
             await self._broadcast({"t": "betting", "rid": self.round_id})

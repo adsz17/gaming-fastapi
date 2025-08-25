@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, WebSocket
-from .engine import CrashEngine, CRASH_MIN_BET
 import uuid
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, WebSocket
+from pydantic import BaseModel, Field
+from .engine import CrashEngine, CRASH_MIN_BET
 
 router = APIRouter(prefix="/crash", tags=["crash"])
 
@@ -22,17 +23,21 @@ async def state(response: Response, player_id: str | None = Cookie(default=None)
     pid = ensure_player_id(player_id, response)
     return await engine.state(pid)
 
-@router.post("/bet")
+class BetIn(BaseModel):
+    amount: float = Field(..., ge=CRASH_MIN_BET)
+    auto_cashout: float | None = Field(default=None, ge=1.01)
+
+
+@router.post("/bet", status_code=201)
 async def bet(
+    body: BetIn,
     response: Response,
-    amount: float,
-    auto_cashout: float | None = None,
     player_id: str | None = Cookie(default=None),
     engine: CrashEngine = Depends(get_engine),
 ):
     pid = ensure_player_id(player_id, response)
     try:
-        await engine.place_bet(pid, float(amount), auto_cashout)
+        await engine.place_bet(pid, body.amount, body.auto_cashout)
         return {"ok": True}
     except ValueError as e:
         if str(e) == "MIN_BET":
