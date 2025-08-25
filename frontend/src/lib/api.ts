@@ -6,6 +6,7 @@ const baseURL = raw.startsWith("http://") && !raw.includes("localhost") ? raw.re
 const api = axios.create({
   baseURL,
   withCredentials: true,
+  headers: { "Content-Type": "application/json" },
 });
 
 api.interceptors.request.use((config) => {
