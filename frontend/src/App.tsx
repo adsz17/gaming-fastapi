@@ -5,12 +5,12 @@ import Play from "./pages/Play";
 import Wallet from "./pages/Wallet";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
-import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { ToastProvider, useToast } from "./components/ui/toast";
 import { setClientErrorHandler } from "./api/client";
+import AdminApp from "./admin";
 
 function AppRoutes() {
   const toast = useToast();
@@ -24,7 +24,7 @@ function AppRoutes() {
       <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute admin><Admin /></ProtectedRoute>} />
+      <Route path="/admin/*" element={<AdminApp />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
     </Routes>
