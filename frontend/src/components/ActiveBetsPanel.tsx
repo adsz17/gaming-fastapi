@@ -3,6 +3,7 @@ import Card from "@/components/ui/card";
 import Skeleton from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { formatMoney, formatMultiplier } from "@/lib/utils";
+import { API_URL } from "@/lib/env";
 
 interface Bet {
   id: number;
@@ -16,7 +17,7 @@ export default function ActiveBetsPanel() {
   const toast = useToast();
 
   React.useEffect(() => {
-    fetch("/api/bets/active")
+    fetch(`${API_URL}/bets/active`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => setBets(data))
       .catch(() => toast("Error cargando apuestas"))

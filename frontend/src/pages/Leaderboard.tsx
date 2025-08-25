@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Card from "@/components/ui/card";
+import { API_URL } from "@/lib/env";
 
 interface Entry {
   username: string;
@@ -11,7 +12,7 @@ export default function Leaderboard() {
   const [entries, setEntries] = useState<Entry[]>([]);
 
   useEffect(() => {
-    fetch("/leaderboard")
+    fetch(`${API_URL}/leaderboard`, { credentials: "include" })
       .then((res) => (res.ok ? res.json().catch(() => []) : []))
       .then((data) => setEntries(data))
       .catch(() => {});

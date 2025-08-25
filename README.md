@@ -4,18 +4,12 @@ Separates a FastAPI backend and a Vite + React frontend.
 
 ## Environment variables
 
-### Backend (Web Service)
+| Service  | Variables |
+|----------|-----------|
+| Backend  | `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `DB_SCHEMA`?, `SENTRY_DSN`? |
+| Frontend | `VITE_API_URL`, `VITE_WS_URL`? |
 
-- `DATABASE_URL`
-- `JWT_SECRET`
-- `ALLOWED_ORIGINS` comma separated list
-- `DB_SCHEMA` optional schema name
-- `GIT_SHA` optional commit hash injected by CI
-- `SENTRY_DSN` optional
-
-### Frontend (Static Site)
-
-- `VITE_API_URL` = `https://gaming-fastapi.onrender.com`
+`ALLOWED_ORIGINS` accepts a JSON list (`["https://front.com","http://localhost:5173"]`) or a comma-separated string (`https://front.com,http://localhost:5173`).
 
 See the `.env.example` files in each folder.
 
@@ -43,12 +37,6 @@ The frontend runs on [http://localhost:5173](http://localhost:5173) and uses `VI
 ### Admin Panel
 
 The admin interface lives under `/admin` and authenticates using a token stored in `localStorage` (`adminToken`) which is sent via the `X-Admin-Token` header.
-
-Optional environment variable:
-
-```
-VITE_API_BASE_URL=http://localhost:8000
-```
 
 Generate the UI components with [shadcn/ui](https://ui.shadcn.com):
 

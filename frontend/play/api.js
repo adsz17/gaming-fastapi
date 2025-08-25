@@ -1,3 +1,5 @@
+const API_URL = import.meta.env.VITE_API_URL;
+
 function headers(token) {
   const h = { 'Content-Type': 'application/json' };
   if (token) h['Authorization'] = 'Bearer ' + token;
@@ -5,9 +7,10 @@ function headers(token) {
 }
 
 async function request(path, opts = {}, token) {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_URL}${path}`, {
     ...opts,
     headers: { ...headers(token), ...(opts.headers || {}) },
+    credentials: 'include',
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

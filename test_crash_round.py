@@ -6,6 +6,7 @@ from pathlib import Path
 
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/db"
 os.environ["RATE_LIMIT_PER_MIN"] = "1000"
+os.environ["JWT_SECRET"] = "change-me"
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, func

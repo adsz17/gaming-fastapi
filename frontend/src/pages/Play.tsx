@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatMoney, formatMultiplier } from "@/lib/utils";
 import BetForm from "@/components/BetForm";
 import ActiveBetsPanel from "@/components/ActiveBetsPanel";
+import { API_URL } from "@/lib/env";
 
 export default function Play() {
   const [balance, setBalance] = React.useState<number | null>(null);
@@ -13,7 +14,7 @@ export default function Play() {
   const toast = useToast();
 
   React.useEffect(() => {
-    fetch("/api/wallet/balance")
+    fetch(`${API_URL}/wallet/balance`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => setBalance(data.balance ?? 0))
       .catch(() => toast("Error cargando saldo"));

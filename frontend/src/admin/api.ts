@@ -1,9 +1,8 @@
 import { LedgerItem, Round } from "./types";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+import { API_URL } from "@/lib/env";
 
 function buildUrl(path: string, query?: Record<string, any>) {
-  const url = new URL(path, API_BASE_URL || window.location.origin);
+  const url = new URL(path, API_URL || window.location.origin);
   if (query) {
     Object.entries(query).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") {
@@ -18,7 +17,7 @@ async function apiFetch<T>(path: string, opts: { query?: Record<string, any> } =
   const token = localStorage.getItem("adminToken");
   const res = await fetch(buildUrl(path, opts.query), {
     headers: token ? { "X-Admin-Token": token } : undefined,
-    credentials: "omit",
+    credentials: "include",
   });
   if (res.status === 401 || res.status === 403) {
     localStorage.removeItem("adminToken");

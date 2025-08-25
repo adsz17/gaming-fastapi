@@ -1,4 +1,5 @@
 import { getState, placeBet, getHistory } from './api.js';
+const API_URL = import.meta.env.VITE_API_URL;
 
 const btnAuth = document.getElementById('btnAuth');
 const loginModal = document.getElementById('loginModal');
@@ -62,10 +63,11 @@ loginForm.addEventListener('submit', async (e) => {
   const email = loginForm.email.value.trim();
   const password = loginForm.password.value;
   try {
-    const res = await fetch('/auth/login', {
+    const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
+      credentials: 'include'
     });
     const data = await res.json();
     if(!res.ok) throw new Error(data.detail || 'Login error');
