@@ -13,7 +13,7 @@ os.environ.setdefault("RNG_HOUSE_EDGE", "0.01")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "backend"))
 
-from api.services.rng import SEEDS, app, hmac_sha256, verify_signature
+from api.services.rng import SEEDS, app, hmac_sha256, verify_signature  # noqa: E402
 
 client = TestClient(app)
 
