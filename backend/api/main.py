@@ -13,6 +13,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from .db import SessionLocal
+from .settings import settings
 
 from .middleware.ratelimit import RateLimitMiddleware
 from .auth import router as auth_router
@@ -31,25 +32,16 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-DEFAULT_ORIGINS = [
-    "https://gaming-fastapi-1.onrender.com",
-    "https://gaming-fastapi.onrender.com",
-    "http://localhost:5173",
-    "http://localhost:3000",
-]
-raw = os.getenv("ALLOWED_ORIGINS")
-if raw:
-    ORIGINS = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
-else:
-    ORIGINS = DEFAULT_ORIGINS
-
+# ⬇️ CORS debe ir primero
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ORIGINS,
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# (después) tus middlewares propios
 app.add_middleware(RateLimitMiddleware)
 
 app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
