@@ -47,8 +47,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 app.add_middleware(RateLimitMiddleware)
 
@@ -103,7 +103,7 @@ def healthz():
             s.execute(text("SELECT 1"))
     except Exception as exc:  # pragma: no cover - health check
         raise HTTPException(status_code=500, detail="db_error") from exc
-    commit = os.getenv("COMMIT_SHA")
+    commit = os.getenv("GIT_SHA")
     if not commit:
         try:
             commit = (
@@ -111,7 +111,7 @@ def healthz():
             )
         except Exception:  # pragma: no cover - git not available
             commit = "unknown"
-    return {"ok": True, "commit": commit}
+    return {"ok": True, "db": True, "version": commit}
 
 
 @app.get("/version")

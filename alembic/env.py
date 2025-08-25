@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, event
 from alembic import context
 
 import logging
@@ -28,6 +28,7 @@ except ModuleNotFoundError:
     from api.models import Base
 
 target_metadata = Base.metadata
+SCHEMA = os.getenv("DB_SCHEMA")
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -51,6 +52,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table_schema=SCHEMA,
     )
 
     with context.begin_transaction():
@@ -68,9 +70,18 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
+    if SCHEMA:
+        def _set_search_path(dbapi_conn, _):
+            with dbapi_conn.cursor() as cursor:
+                cursor.execute(f"SET search_path TO {SCHEMA}, public")
+
+        event.listen(connectable, "connect", _set_search_path, once=True)
+
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema=SCHEMA,
         )
 
         with context.begin_transaction():

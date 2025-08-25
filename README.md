@@ -8,7 +8,10 @@ Separates a FastAPI backend and a Vite + React frontend.
 
 - `DATABASE_URL`
 - `JWT_SECRET`
-- `CORS_ORIGINS` = `["https://gaming-fastapi-1.onrender.com","http://localhost:5173"]`
+- `ALLOWED_ORIGINS` comma separated list
+- `DB_SCHEMA` optional schema name
+- `GIT_SHA` optional commit hash injected by CI
+- `SENTRY_DSN` optional
 
 ### Frontend (Static Site)
 
@@ -24,6 +27,7 @@ See the `.env.example` files in each folder.
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn api.main:app --reload
 ```
 
@@ -35,6 +39,12 @@ npm run dev
 ```
 
 The frontend runs on [http://localhost:5173](http://localhost:5173) and uses `VITE_API_URL` for API calls.
+
+### Schema search_path
+
+If the default `public` schema is not writable, set `DB_SCHEMA` and the
+application will issue `SET search_path TO <schema>, public` for all
+connections. Alembic respects the same variable.
 
 ## Deploy on Render
 
