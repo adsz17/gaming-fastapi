@@ -20,6 +20,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.buckets: Dict[str, Dict[str, float]] = {}
 
     async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         path = request.url.path
         if path.startswith("/api/auth/") or path == "/crash/round":
             client = request.client
