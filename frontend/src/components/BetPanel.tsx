@@ -1,63 +1,60 @@
-import { useGameStore } from "@/lib/store";
+import { useCrashData } from "@/hooks/useCrashData";
+import { useState } from "react";
 import Button from "./ui/button";
 import Input from "./ui/input";
 import Card from "./ui/card";
-import { useToast } from "./ui/toast";
 
 export default function BetPanel() {
-  const {
-    bet,
-    setBet,
-    autoCashout,
-    setAutoCashout,
-    phase,
-    setPhase,
-    balance,
-    setBalance,
-  } = useGameStore();
-  const toast = useToast();
+  const { phase, multiplier, minBet, bet, cashout } = useCrashData();
+  const [amount, setAmount] = useState<number>(minBet);
 
-  const handleBet = () => {
-    if (bet > balance) {
-      toast("Insufficient balance");
-      return;
-    }
-    setBalance(balance - bet);
-    setPhase("betting");
-  };
-
-  const handleCashout = () => {
-    setPhase("idle");
-    toast(`Cashed out at ${useGameStore.getState().multiplier.toFixed(2)}x`);
-  };
+  const betDisabled = phase !== "BETTING" || !amount || amount < minBet;
+  const cashDisabled = phase !== "RUNNING";
 
   return (
     <Card className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          value={bet}
-          onChange={(e) => setBet(Number(e.target.value))}
-          className="w-full"
-        />
-        <Button onClick={() => setBet(bet / 2)}>1/2</Button>
-        <Button onClick={() => setBet(bet * 2)}>2x</Button>
+      <div className="text-6xl font-extrabold text-[#39FF14] text-center">
+        {multiplier.toFixed(2)}x
       </div>
+
       <Input
         type="number"
-        value={autoCashout}
-        onChange={(e) => setAutoCashout(Number(e.target.value))}
-        placeholder="Auto cashout"
+        min={minBet}
+        value={amount}
+        onChange={(e) => setAmount(Number(e.target.value))}
         className="w-full"
       />
-      {phase === "flying" ? (
-        <Button className="w-full bg-neon-pink" onClick={handleCashout}>
-          Cashout
-        </Button>
-      ) : (
-        <Button className="w-full bg-neon-blue" onClick={handleBet} disabled={phase !== "idle"}>
-          Bet
-        </Button>
+      <Button
+        disabled={betDisabled}
+        className="w-full bg-neon-blue"
+        onClick={async () => {
+          try {
+            await bet(amount);
+          } catch (e) {
+            console.error(e);
+          }
+        }}
+      >
+        Bet
+      </Button>
+
+      <Button
+        disabled={cashDisabled}
+        className="w-full bg-neon-pink"
+        onClick={() => cashout().catch(console.error)}
+      >
+        Cashout
+      </Button>
+
+      {phase === "BETTING" && (
+        <p className="text-xs text-slate-400">
+          Esperando apuestas (mín: {minBet})…
+        </p>
+      )}
+      {phase === "CRASHED" && (
+        <p className="text-xs text-rose-400">
+          💥 Crash! Nueva ronda en segundos…
+        </p>
       )}
     </Card>
   );
