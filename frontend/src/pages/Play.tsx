@@ -12,7 +12,11 @@ export default function Play() {
   const toast = useToast();
 
   React.useEffect(() => {
-    fetch(`${API_URL}/wallet/balance`, { credentials: "include" })
+    const token = localStorage.getItem("token") || "";
+    fetch(`${API_URL}/wallet/balance`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
       .then((res) => res.json())
       .then((data) => setBalance(data.balance ?? 0))
       .catch(() => toast("Error cargando saldo"));
