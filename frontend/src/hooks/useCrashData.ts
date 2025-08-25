@@ -17,8 +17,8 @@ export function useCrashData() {
         const r = await fetch(`${API_URL}/crash/state`, { credentials: "include" });
         const d = await r.json();
         if (d.phase) setPhase(d.phase);
-        if (d.multiplier) setMultiplier(d.multiplier);
-        if (d.min_bet) setMinBet(d.min_bet);
+        if (typeof d.multiplier === "number") setMultiplier(d.multiplier);
+        if (typeof d.min_bet === "number") setMinBet(d.min_bet);
       } catch (e: any) {
         setError(e?.message ?? "Error inicial");
       }
@@ -34,12 +34,14 @@ export function useCrashData() {
         const msg = JSON.parse(ev.data);
         if (msg.t === "state") {
           if (msg.phase) setPhase(msg.phase);
-          if (msg.m) setMultiplier(msg.m);
+          if (typeof msg.m === "number") setMultiplier(msg.m);
+          if (typeof msg.min_bet === "number") setMinBet(msg.min_bet);
         } else if (msg.t === "start") {
           setPhase("RUNNING");
           setMultiplier(1);
         } else if (msg.t === "tick") {
-          setMultiplier(msg.m);
+          setPhase("RUNNING");
+          if (typeof msg.m === "number") setMultiplier(msg.m);
         } else if (msg.t === "crash") {
           setPhase("CRASHED");
         } else if (msg.t === "betting") {

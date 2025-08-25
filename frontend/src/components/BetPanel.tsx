@@ -1,5 +1,5 @@
 import { useCrashData } from "@/hooks/useCrashData";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "./ui/button";
 import Input from "./ui/input";
 import Card from "./ui/card";
@@ -8,6 +8,9 @@ import { useToast } from "@/components/ui/toast";
 export default function BetPanel() {
   const { phase, multiplier, minBet, bet, cashout } = useCrashData();
   const [amount, setAmount] = useState<number>(minBet);
+  useEffect(() => {
+    setAmount(minBet);
+  }, [minBet]);
   const toast = useToast();
 
   const betDisabled = phase !== "BETTING" || !amount || amount < minBet;

@@ -24,7 +24,7 @@ async def state(response: Response, player_id: str | None = Cookie(default=None)
     return await engine.state(pid)
 
 class BetIn(BaseModel):
-    amount: float = Field(..., ge=CRASH_MIN_BET)
+    amount: float
     auto_cashout: float | None = Field(default=None, ge=1.01)
 
 
