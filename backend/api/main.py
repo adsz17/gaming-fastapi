@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import subprocess
 import uuid
@@ -13,7 +14,6 @@ from typing import Optional
 from sqlalchemy import text
 
 from .db import SessionLocal
-from .settings import settings
 
 from .middleware.ratelimit import RateLimitMiddleware
 from .auth import router as auth_router
@@ -32,13 +32,32 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-# ⬇️ CORS debe ir primero
+raw = os.getenv("ALLOWED_ORIGINS", "[]")
+try:
+    allowed = (
+        json.loads(raw)
+        if raw.strip().startswith("[")
+        else [o.strip() for o in raw.split(",") if o.strip()]
+    )
+except Exception:
+    allowed = [raw] if raw else []
+
+# Agregá explícitamente tus dos hosts (por si la ENV viene vacía o mal)
+if "https://gaming-fastapi-1.onrender.com" not in allowed:
+    allowed.append("https://gaming-fastapi-1.onrender.com")
+if "https://gaming-fastapi.onrender.com" not in allowed:
+    allowed.append("https://gaming-fastapi.onrender.com")
+
+print("CORS ALLOWED_ORIGINS =", allowed)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=allowed,  # lista exacta de orígenes
+    allow_origin_regex=r"^https://.*\.onrender\.com$",  # “salvavidas” seguro
+    allow_credentials=True,  # si usás cookies
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # (después) tus middlewares propios

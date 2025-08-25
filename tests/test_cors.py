@@ -7,6 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "b
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/test"
 os.environ["RATE_LIMIT_PER_MIN"] = "1000"
 os.environ["JWT_SECRET"] = "change-me-please"
+os.environ["ALLOWED_ORIGINS"] = '["http://localhost:5173"]'
 
 import api.main as main  # noqa: E402
 
