@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Card from "@/components/ui/card";
 import { useGameStore } from "@/lib/store";
+import { API_URL } from "@/lib/env";
 
 interface User {
   id: string;
@@ -15,11 +16,17 @@ export default function Profile() {
 
   useEffect(() => {
     const token = localStorage.getItem("token") || "";
-    fetch("/me", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_URL}/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
       .then((res) => (res.ok ? res.json().catch(() => null) : null))
       .then((data) => data && setUser(data))
       .catch(() => {});
-    fetch("/wallet/balance", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_URL}/wallet/balance`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
       .then((res) => (res.ok ? res.json().catch(() => ({})) : {}))
       .then((data) => {
         if (typeof data.balance === "number") {

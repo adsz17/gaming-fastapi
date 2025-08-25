@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "backend"))
 os.environ["DATABASE_URL"] = "postgresql+psycopg://user:pass@localhost/test"
 os.environ["RATE_LIMIT_PER_MIN"] = "1000"
+os.environ["JWT_SECRET"] = "change-me"
 
 import api.main as main  # noqa: E402
 from api.models import Base, User, Wallet  # noqa: E402

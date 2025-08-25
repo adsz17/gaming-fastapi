@@ -1,6 +1,5 @@
-import os
-import json
 import logging
+import os
 import subprocess
 import uuid
 from fastapi import FastAPI, Request, HTTPException
@@ -19,6 +18,7 @@ from .middleware.ratelimit import RateLimitMiddleware
 from .middleware.security_headers import SecureHeadersMiddleware
 from .auth import router as auth_router
 from .admin_routes import router as admin_router
+from app.core.env import ALLOWED_ORIGINS
 
 # Routers (importá solo los que existan en tu proyecto)
 wallet: Optional[ModuleType] = None
@@ -33,32 +33,17 @@ except Exception:
 
 app = FastAPI(title="FastAPI", version="0.1.0")
 
-raw = os.getenv("ALLOWED_ORIGINS", "[]")
-try:
-    allowed = (
-        json.loads(raw)
-        if raw.strip().startswith("[")
-        else [o.strip() for o in raw.split(",") if o.strip()]
-    )
-except Exception:
-    allowed = [raw] if raw else []
-
-# Agregá explícitamente tus dos hosts (por si la ENV viene vacía o mal)
-if "https://gaming-fastapi-1.onrender.com" not in allowed:
-    allowed.append("https://gaming-fastapi-1.onrender.com")
-if "https://gaming-fastapi.onrender.com" not in allowed:
-    allowed.append("https://gaming-fastapi.onrender.com")
-
-print("CORS ALLOWED_ORIGINS =", allowed)
+logger = logging.getLogger("uvicorn")
+logger.info("CORS: %d allowed origins", len(ALLOWED_ORIGINS))
+if os.getenv("ENV", "production") != "production":
+    logger.info("Allowed origins: %s", ALLOWED_ORIGINS)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed,  # lista exacta de orígenes
-    allow_origin_regex=r"^https://.*\.onrender\.com$",  # “salvavidas” seguro
-    allow_credentials=True,  # si usás cookies
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # (después) tus middlewares propios
@@ -66,9 +51,6 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecureHeadersMiddleware)
 
 app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
-
-
-logger = logging.getLogger("uvicorn")
 
 
 @app.middleware("http")
@@ -106,6 +88,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+if os.getenv("ENV", "production") != "production":
+    @app.get("/_debug/origins")
+    def debug_origins():
+        return {"origins": ALLOWED_ORIGINS}
 
 
 @app.get("/healthz")

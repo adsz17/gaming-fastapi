@@ -1,6 +1,7 @@
 import axios, { AxiosError } from "axios";
+import { API_URL } from "./env";
 
-const raw = (import.meta.env.VITE_API_URL || "https://gaming-fastapi.onrender.com").replace(/\/$/, "");
+const raw = (API_URL || "https://gaming-fastapi.onrender.com").replace(/\/$/, "");
 const baseURL = raw.startsWith("http://") && !raw.includes("localhost") ? raw.replace("http://", "https://") : raw;
 
 const api = axios.create({

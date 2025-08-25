@@ -4,6 +4,7 @@ import Card from "@/components/ui/card";
 import Input from "@/components/ui/input";
 import Button from "@/components/ui/button";
 import { useGameStore } from "@/lib/store";
+import { API_URL } from "@/lib/env";
 
 export default function Wallet() {
   const { balance, setBalance } = useGameStore();
@@ -12,7 +13,10 @@ export default function Wallet() {
 
   useEffect(() => {
     const token = localStorage.getItem("token") || "";
-    fetch("/wallet/balance", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_URL}/wallet/balance`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
       .then((res) => (res.ok ? res.json().catch(() => ({})) : {}))
       .then((data) => {
         if (typeof data.balance === "number") {
@@ -24,12 +28,13 @@ export default function Wallet() {
 
   async function sendTxn(amount: number, reason: string) {
     const token = localStorage.getItem("token") || "";
-    const res = await fetch("/wallet/txn", {
+    const res = await fetch(`${API_URL}/wallet/txn`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
+      credentials: "include",
       body: JSON.stringify({
         amount,
         reason,
