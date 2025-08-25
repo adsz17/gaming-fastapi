@@ -11,11 +11,11 @@ export const useToast = () => React.useContext(ToastContext);
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<Toast[]>([]);
 
-  const add = (title: string) => {
+  const add = React.useCallback((title: string) => {
     const id = Date.now();
     setToasts((t) => [...t, { id, title }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3000);
-  };
+  }, []);
 
   return (
     <ToastContext.Provider value={add}>
