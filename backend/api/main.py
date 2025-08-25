@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 import subprocess
 import uuid
 from fastapi import FastAPI, Request, HTTPException
@@ -19,10 +20,11 @@ from .middleware.security_headers import SecureHeadersMiddleware
 from .auth import router as auth_router
 from .admin_routes import router as admin_router
 from app.core.env import ALLOWED_ORIGINS
+from app.crash.router import router as crash_router
+from app.crash.engine import engine as crash_engine
 
 # Routers (importá solo los que existan en tu proyecto)
 wallet: Optional[ModuleType] = None
-crash: Optional[ModuleType] = None
 me: Optional[ModuleType] = None
 metrics: Optional[ModuleType] = None
 leaderboard: Optional[ModuleType] = None
@@ -30,7 +32,6 @@ bets: Optional[ModuleType] = None
 try:
     from .routers import (
         wallet as wallet,
-        crash as crash,
         me as me,
         metrics as metrics,
         leaderboard as leaderboard,
@@ -59,6 +60,10 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecureHeadersMiddleware)
 
 app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
+@app.on_event("startup")
+async def start_crash_engine():
+    asyncio.create_task(crash_engine.run())
+
 
 
 @app.middleware("http")
@@ -135,8 +140,7 @@ async def root() -> RedirectResponse:
 # Incluí routers si existen
 if wallet:
     app.include_router(wallet.router, tags=["wallet"])
-if crash:
-    app.include_router(crash.router, tags=["crash"])
+app.include_router(crash_router, tags=["crash"])
 if me:
     app.include_router(me.router, tags=["default"])
 if metrics:
