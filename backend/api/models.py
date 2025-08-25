@@ -79,3 +79,17 @@ class LedgerEntry(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     balance_after: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+
+
+class AuditLog(Base):
+    """Simple audit log to track user actions."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), index=True, nullable=True)
+    action: Mapped[str] = mapped_column(String(255))
+    ip: Mapped[str] = mapped_column(String(45))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

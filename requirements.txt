@@ -13,3 +13,5 @@ alembic==1.13.1
 numpy==1.26.4
 locust==2.24.0
 PyJWT==2.8.0
+aiosqlite==0.20.0
+asyncpg==0.29.0
