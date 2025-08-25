@@ -16,6 +16,7 @@ from sqlalchemy import text
 from .db import SessionLocal
 
 from .middleware.ratelimit import RateLimitMiddleware
+from .middleware.security_headers import SecureHeadersMiddleware
 from .auth import router as auth_router
 from .admin_routes import router as admin_router
 
@@ -62,6 +63,7 @@ app.add_middleware(
 
 # (después) tus middlewares propios
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecureHeadersMiddleware)
 
 app.mount("/admin", StaticFiles(directory=Path(__file__).parent / "static" / "admin", html=True), name="admin")
 

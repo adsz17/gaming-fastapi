@@ -54,7 +54,6 @@
 
 <script>
   const API = location.origin + "/api/admin";
-  let token = localStorage.getItem("adm_token") || "";
 
   const el = (id)=>document.getElementById(id);
   const setStatus = (t)=> el("status").textContent = t;
@@ -64,21 +63,25 @@
     el("app").style.display = auth ? "block" : "none";
     setStatus(auth ? "Autenticado" : "Desconectado");
   }
-  showApp(!!token);
+  showApp(false);
 
   el("btnLogin")?.addEventListener("click", async ()=>{
     const email = el("email").value.trim();
     const password = el("password").value;
-    const r = await fetch(API+"/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+    const r = await fetch(API+"/login",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email,password}),
+      credentials:"include"
+    });
     if(!r.ok){ alert("Login inválido"); return; }
-    const data = await r.json();
-    token = data.access_token; localStorage.setItem("adm_token", token);
     showApp(true); loadPending();
   });
 
   async function loadPending(){
-    const r = await fetch(API+"/transactions/pending",{headers:{Authorization:"Bearer "+token}});
-    if(!r.ok){ if(r.status===401||r.status===403){ localStorage.removeItem("adm_token"); token=""; showApp(false); } return; }
+    const r = await fetch(API+"/transactions/pending",{credentials:"include"});
+    if(!r.ok){ if(r.status===401||r.status===403){ showApp(false); } return; }
+    showApp(true);
     const rows = await r.json();
     const tbody = el("tbl").querySelector("tbody");
     tbody.innerHTML = "";
@@ -107,8 +110,9 @@
     const note = approve ? "ok" : prompt("Motivo de rechazo (opcional)") || null;
     const r = await fetch(API+`/transactions/${id}/decide`,{
       method:"POST",
-      headers:{"Content-Type":"application/json", Authorization:"Bearer "+token},
-      body: JSON.stringify({approve, note})
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({approve, note}),
+      credentials:"include"
     });
     if(!r.ok){ alert("Error al decidir"); return; }
     loadPending();
@@ -120,12 +124,13 @@
     if(!email_or_user_id || !(amount>0)) return alert("Completa usuario y monto");
     const r = await fetch(API+"/credit",{
       method:"POST",
-      headers:{"Content-Type":"application/json", Authorization:"Bearer "+token},
-      body: JSON.stringify({email_or_user_id, amount, note:"Ajuste manual"})
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({email_or_user_id, amount, note:"Ajuste manual"}),
+      credentials:"include"
     });
     if(!r.ok){ alert("No se pudo acreditar"); return; }
     el("creditAmount").value=""; alert("Acreditado ✔");
   });
 
-  if(token) loadPending();
+  loadPending();
 </script>

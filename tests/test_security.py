@@ -57,3 +57,9 @@ def test_rate_limit_block():
             "/api/auth/login", json={"email": "b@b.com", "password": "secret"}
         )
         assert res.status_code == 429
+
+
+def test_secure_headers():
+    with create_client("60") as client:
+        res = client.get("/health")
+        assert res.headers["X-Frame-Options"] == "DENY"
