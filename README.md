@@ -66,6 +66,21 @@ connections. Alembic respects the same variable.
 
 The backend exposes `GET /health` returning `{ "ok": true }`.
 
+## Fases del Crash
+
+El juego de crash tiene tres fases:
+
+- **BETTING**: los jugadores pueden apostar.
+- **RUNNING**: el multiplicador sube hasta que crashea.
+- **CRASHED**: ronda terminada; tras unos segundos vuelve a BETTING.
+
+Endpoints relevantes:
+
+- `GET /crash/state`
+- `POST /crash/bet`
+- `POST /crash/cashout`
+- `WS /crash/stream`
+
 ## Manual crash test
 
 Para verificar rápidamente el juego de crash:
