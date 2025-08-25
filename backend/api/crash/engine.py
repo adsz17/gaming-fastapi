@@ -14,7 +14,7 @@ class CrashEngine:
         self.multiplier: float = 1.0
         self.crash_at: Optional[float] = None
         self.started: bool = False  # si ya arrancó la ronda actual
-        self.bets: Dict[str, Dict] = {}  # player_id -> {amount, cashed:bool, payout:Optional[float]}
+        self.bets: Dict[str, Dict] = {}  # player_id -> {amount, cashed:bool, payout:Optional[float], cash_at:Optional[float]}
         self.connections: Set[WebSocket] = set()
         self._lock = asyncio.Lock()
         self._runner_task: Optional[asyncio.Task] = None
@@ -51,7 +51,13 @@ class CrashEngine:
                 raise RuntimeError("NOT_BETTING")
             if player_id in self.bets:
                 raise RuntimeError("ALREADY_BET")
-            self.bets[player_id] = {"amount": float(amount), "auto": auto, "cashed": False, "payout": None}
+            self.bets[player_id] = {
+                "amount": float(amount),
+                "auto": auto,
+                "cashed": False,
+                "payout": None,
+                "cash_at": None,
+            }
             await self._broadcast({"t": "player_bet", "a": amount})
             # si es la primera apuesta de la ronda, arrancamos
             if not self.started:
@@ -68,12 +74,15 @@ class CrashEngine:
             if self.phase != "RUNNING":
                 raise RuntimeError("NOT_RUNNING")
             bet = self.bets.get(player_id)
-            if not bet or bet["cashed"]:
+            if not bet:
                 raise RuntimeError("NO_ACTIVE_BET")
+            if bet["cashed"]:
+                return {"at": bet["cash_at"], "payout": bet["payout"]}
             bet["cashed"] = True
             bet["payout"] = round(bet["amount"] * self.multiplier, 2)
+            bet["cash_at"] = self.multiplier
             await self._broadcast({"t": "player_cash", "at": self.multiplier, "p": bet["payout"]})
-            return {"at": self.multiplier, "payout": bet["payout"]}
+            return {"at": bet["cash_at"], "payout": bet["payout"]}
 
     async def state(self, player_id: Optional[str] = None):
         you = None
@@ -104,6 +113,7 @@ class CrashEngine:
                     if not b["cashed"] and b["auto"] and self.multiplier >= float(b["auto"]):
                         b["cashed"] = True
                         b["payout"] = round(b["amount"] * self.multiplier, 2)
+                        b["cash_at"] = self.multiplier
                         await self._broadcast({"t": "player_cash", "at": self.multiplier, "p": b["payout"]})
                 if self.crash_at and self.multiplier >= self.crash_at:
                     break
