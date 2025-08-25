@@ -40,6 +40,23 @@ npm run dev
 
 The frontend runs on [http://localhost:5173](http://localhost:5173) and uses `VITE_API_URL` for API calls.
 
+### Admin Panel
+
+The admin interface lives under `/admin` and authenticates using a token stored in `localStorage` (`adminToken`) which is sent via the `X-Admin-Token` header.
+
+Optional environment variable:
+
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+Generate the UI components with [shadcn/ui](https://ui.shadcn.com):
+
+```
+npx shadcn-ui@latest init
+npx shadcn-ui@latest add button card input badge table tabs dialog dropdown-menu
+```
+
 ### Schema search_path
 
 If the default `public` schema is not writable, set `DB_SCHEMA` and the
