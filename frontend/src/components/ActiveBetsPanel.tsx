@@ -17,7 +17,11 @@ export default function ActiveBetsPanel() {
   const toast = useToast();
 
   React.useEffect(() => {
-    fetch(`${API_URL}/bets/active`, { credentials: "include" })
+    const token = localStorage.getItem("token") || "";
+    fetch(`${API_URL}/bets/active`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error("failed");
