@@ -2,7 +2,7 @@ import argparse
 import os
 from typing import Optional, Tuple
 
-import numpy as np
+import math
 
 import hmac
 import hashlib
@@ -25,14 +25,28 @@ def run_simulation(iterations: int, server_seed: Optional[str] = None, client_se
     if server_seed is None:
         server_seed = os.urandom(32).hex()
 
-    multipliers = np.empty(iterations, dtype=np.float64)
-    for i in range(iterations):
-        multipliers[i] = crash_multiplier(server_seed, client_seed, i + 1)
+    multipliers = [crash_multiplier(server_seed, client_seed, i + 1) for i in range(iterations)]
 
-    total_payout = multipliers.sum()
+    total_payout = sum(multipliers)
     rtp = total_payout / iterations
-    mean = multipliers.mean()
-    p50, p95, p99 = np.percentile(multipliers, [50, 95, 99])
+    mean = rtp
+
+    def percentile(values, pct):
+        if not values:
+            return 0.0
+        values_sorted = sorted(values)
+        k = (len(values_sorted) - 1) * pct
+        f = math.floor(k)
+        c = math.ceil(k)
+        if f == c:
+            return values_sorted[int(k)]
+        d0 = values_sorted[f] * (c - k)
+        d1 = values_sorted[c] * (k - f)
+        return d0 + d1
+
+    p50 = percentile(multipliers, 0.50)
+    p95 = percentile(multipliers, 0.95)
+    p99 = percentile(multipliers, 0.99)
     return rtp, mean, p50, p95, p99
 
 
