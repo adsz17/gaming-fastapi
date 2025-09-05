@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { ToastProvider, useToast } from "./components/ui/toast";
 import { setClientErrorHandler } from "./api/client";
 import AdminApp from "./admin";
+import FadeIn from "./components/FadeIn";
 
 function AppRoutes() {
   const toast = useToast();
@@ -34,7 +35,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <ToastProvider>
-      <AppRoutes />
+      <FadeIn>
+        <AppRoutes />
+      </FadeIn>
     </ToastProvider>
   );
 }
