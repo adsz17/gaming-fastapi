@@ -6,7 +6,7 @@ export const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttrib
     <button
       ref={ref}
       className={cn(
-        "px-4 py-2 rounded bg-neon-blue text-gray-900 hover:bg-neon-pink transition-colors disabled:opacity-50",
+        "px-4 py-2 rounded bg-neon-blue text-gray-900 hover:bg-neon-pink transition disabled:opacity-50 transform hover:scale-105",
         className
       )}
       {...props}
