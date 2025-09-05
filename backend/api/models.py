@@ -118,3 +118,36 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class CrashRound(Base):
+    """Crash game round metadata."""
+
+    __tablename__ = "crash_rounds"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    crash_at: Mapped[float] = mapped_column(Numeric(10, 2))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class CrashBet(Base):
+    """Individual bets per crash round."""
+
+    __tablename__ = "crash_bets"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
+    round_id: Mapped[str] = mapped_column(ForeignKey("crash_rounds.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    status: Mapped[str] = mapped_column(
+        Enum("OPEN", "CASHED", "LOST", name="crash_bet_status"), default="OPEN"
+    )
+    cashout_multiplier: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    payout: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

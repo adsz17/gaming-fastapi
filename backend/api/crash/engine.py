@@ -1,5 +1,5 @@
 import asyncio, math, os, time, uuid, random
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Awaitable, Callable, List
 from fastapi import WebSocket
 
 CRASH_MIN_BET = float(os.getenv("CRASH_MIN_BET", "1"))
@@ -18,6 +18,7 @@ class CrashEngine:
         self.connections: Set[WebSocket] = set()
         self._lock = asyncio.Lock()
         self._runner_task: Optional[asyncio.Task] = None
+        self.on_crash: Optional[Callable[[str, List[str]], Awaitable[None]]] = None
 
     # --------- utilidades ----------
     def _gen_crash_at(self) -> float:
@@ -122,9 +123,16 @@ class CrashEngine:
             self.phase = "CRASHED"
             await self._broadcast({"t": "crash", "at": self.crash_at})
             # liquidar perdedores (sin cashout)
+            losers = []
             for pid, b in self.bets.items():
                 if not b["cashed"]:
                     b["payout"] = 0.0
+                    losers.append(pid)
+            if self.on_crash and losers:
+                try:
+                    await self.on_crash(self.round_id, losers)
+                except Exception:
+                    pass
             await asyncio.sleep(CRASH_INTERMISSION_SECONDS)
             # reset
             self.phase = "BETTING"

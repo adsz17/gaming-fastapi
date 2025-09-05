@@ -20,7 +20,7 @@ from .middleware.security_headers import SecureHeadersMiddleware
 from .auth import router as auth_router
 from .admin_routes import router as admin_router
 from api.crash.engine import CrashEngine
-from api.crash.router import router as crash_router
+from api.crash.router import router as crash_router, handle_crash
 
 
 def _parse_origins(raw: str | None) -> list[str]:
@@ -55,7 +55,9 @@ except Exception:
 ALLOWED_ORIGINS = _parse_origins(os.getenv("ALLOWED_ORIGINS"))
 
 app = FastAPI(title="FastAPI", version="0.1.0")
-app.state.crash_engine = CrashEngine()
+engine = CrashEngine()
+engine.on_crash = handle_crash
+app.state.crash_engine = engine
 
 logger = logging.getLogger("uvicorn")
 logger.info("CORS: %d allowed origins", len(ALLOWED_ORIGINS))
